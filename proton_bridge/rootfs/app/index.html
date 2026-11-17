@@ -48,6 +48,7 @@ input:focus { outline: 2px solid var(--accent); border-color: transparent; }
 .btn.tonal { background: var(--accent-soft); color: var(--accent); }
 .btn.danger { background: var(--err-soft); color: var(--err); }
 .btn:disabled { opacity: .5; cursor: default; }
+.btn.act { flex: none; min-width: 104px; padding: 8px 16px; }
 .msg { border-radius: 12px; padding: 10px 14px; font-size: 14px; margin-top: 12px; overflow-wrap: anywhere; }
 .mode { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 4px 0 12px; }
 .mode small { display: block; color: var(--muted); font-size: 13px; }
@@ -233,20 +234,19 @@ pre { background: var(--field); border-radius: 12px; padding: 12px; margin: 0 0 
     </div>
     <div class="card">
       <h2>Updates</h2>
-      <p>Bridge is updated together with this app, so Bridge's own automatic updates are off. A daily check publishes
-         a new app version when Proton releases one. Check now to see what Proton's update server says.</p>
-      <div class="row"><button class="btn tonal" id="check-updates">Check now</button></div>
+      <div class="toggle"><div>Check for updates<small>Bridge updates together with this app, which gets a new version within a day of a Proton release.</small></div>
+        <button class="btn tonal act" id="check-updates">Check now</button></div>
       <div id="updates-msg"></div>
     </div>
     <div id="settings-msg"></div>
     <div class="card">
       <h2>Maintenance</h2>
-      <p>If Bridge or your mail isn't behaving, try these in order. Each one explains what it does and asks before it starts.</p>
-      <div class="row">
-        <button class="btn tonal" id="restart">Restart Bridge</button>
-        <button class="btn tonal" id="repair">Repair</button>
-        <button class="btn danger" id="reset">Reset Bridge</button>
-      </div>
+      <div class="toggle"><div>Restart Bridge<small>Restart Bridge without changing accounts or settings.</small></div>
+        <button class="btn tonal act" id="restart">Restart</button></div>
+      <div class="toggle"><div>Repair Bridge<small>Reload all accounts, cached data, and download all emails again. Home Assistant stays connected to Bridge.</small></div>
+        <button class="btn tonal act" id="repair">Repair</button></div>
+      <div class="toggle"><div>Reset Bridge<small>Remove all accounts, clear cached data, and restore the original settings.</small></div>
+        <button class="btn danger act" id="reset">Reset</button></div>
       <div id="maint-msg"></div>
     </div>
   </section>
@@ -568,7 +568,7 @@ $("reset").onclick = async () => {
     "Home Assistant's IMAP integration with the new password. Bridge will automatically restart.",
     "Reset and restart", true)) return;
   busy(b, true, "Resetting…");
-  await api("api/factory-reset", {}); busy(b, false); b.textContent = "Reset Bridge";
+  await api("api/factory-reset", {}); busy(b, false); b.textContent = "Reset";
   msg("maint-msg", "ok", "Bridge was reset."); imapShownFor = null; refresh();
 };
 $("repair").onclick = async () => {

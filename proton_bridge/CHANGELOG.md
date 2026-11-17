@@ -3,7 +3,7 @@
 ## 3.27.2-25
 
 - Fixed: the SSL / STARTTLS choices could show no selection after Bridge restarted.
-- Shorter maintenance text; Restart comes first, as the gentlest option.
+- Maintenance and Updates use rows with a button on the right, like Proton's app.
 
 ## 3.27.2-24
 
