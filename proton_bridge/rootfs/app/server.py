@@ -164,14 +164,17 @@ class Bridge:
         return accounts
 
     def sync(self):
-        lines = [l for l in self.buf.splitlines() if l.startswith(("Sync (", "A sync has"))]
+        lines = [l.lstrip("> ") for l in self.buf.splitlines()]
+        lines = [l for l in lines if l.startswith(("Sync (", "A sync has"))]
         if not lines:
             return None
         last = lines[-1]
         if "has finished" in last:
             return {"done": True}
         m = re.search(r"([\d.]+)%", last)
-        return {"done": False, "percent": float(m.group(1)) if m else 0.0}
+        eta = re.search(r"ETA: ([\d.]+)s", last)
+        return {"done": False, "percent": float(m.group(1)) if m else 0.0,
+                "eta": float(eta.group(1)) if eta else None}
 
     def imap(self, index):
         with self.lock:

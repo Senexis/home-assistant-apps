@@ -159,7 +159,8 @@ pre { background: var(--field); border-radius: 12px; padding: 12px; margin: 0 0 
 
       <div id="pane-done" class="pane hidden">
         <h2>You're signed in</h2>
-        <p>Bridge is now downloading your mail. The first time this can take a while; progress shows at the top.</p>
+        <p>Bridge is now downloading your mail. The first time this can take a while.</p>
+        <div id="done-sync"></div>
         <div class="row end"><button class="btn" type="button" id="done-ok">Show account</button></div>
       </div>
 
@@ -242,6 +243,10 @@ async function refresh() {
   else { chip.textContent = "Signed out"; chip.className = "chip warn"; }
 
   resumeWizard();
+  const eta = sync && sync.eta ? (sync.eta > 90 ? `about ${Math.round(sync.eta / 60)} min left` : "less than 2 min left") : "";
+  $("done-sync").innerHTML = sync && !sync.done
+    ? `<div class="sub">Downloading mail: ${Math.round(sync.percent)}%${eta ? ", " + eta : ""}</div><div class="bar"><div style="width:${sync.percent}%"></div></div>`
+    : sync && sync.done ? `<div class="msg ok">All mail downloaded.</div>` : "";
   const showSignin = !state.accounts.length || addingAccount || state.login_state !== "idle" || pane === "done";
   $("signin").classList.toggle("hidden", !showSignin);
   $("accounts-card").classList.toggle("hidden", !state.accounts.length);
@@ -252,7 +257,7 @@ async function refresh() {
       <div style="flex:1;min-width:0">
         <div class="name">${esc(a.name)}</div>
         <div class="sub">${esc(a.state === "connected" ? "Connected" : a.state === "locked" ? "Locked, try again shortly" : "Signed out")} · ${esc(a.mode)} addresses</div>
-        ${sync && !sync.done && a.state === "connected" ? `<div class="bar"><div style="width:${sync.percent}%"></div></div>` : ""}
+        ${sync && !sync.done && a.state === "connected" ? `<div class="sub">Downloading mail: ${Math.round(sync.percent)}%${eta ? ", " + eta : ""}</div><div class="bar"><div style="width:${sync.percent}%"></div></div>` : ""}
       </div>
       ${a.state === "connected"
         ? `<button class="btn tonal" data-act="mode" data-i="${a.index}" title="Switch between one inbox for all addresses (combined) and one per address (split)">${a.mode === "combined" ? "Split" : "Combine"}</button>
@@ -399,7 +404,7 @@ $("console-form").onsubmit = async (e) => {
 };
 
 refresh();
-setInterval(() => { if (state.login_state === "idle" && pane === "credentials") refresh(); }, 10000);
+setInterval(() => { if (state.login_state === "idle" && ["credentials", "done"].includes(pane)) refresh(); }, 5000);
 </script>
 </body>
 </html>
