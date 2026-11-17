@@ -28,6 +28,7 @@ LOGIN_PATTERNS = {
     "need_2fa": "Two factor code: ",
     "need_mailbox": "Mailbox password: ",
     "need_hv": "Human Verification requested",
+    "key_choice": "Do you want to use a security key",
     "need_key": "security key",
     "done": "was added successfully",
     "error": "Cannot login",
@@ -194,8 +195,9 @@ class Bridge:
             return {"state": "need_hv", "url": self.hv_url}
         if key == "need_key":
             self.restart()
-            return {"state": "error", "message": "This account asks for a hardware security key, which "
-                    "can't be used here. Add an authenticator app to your Proton account and try again."}
+            return {"state": "error", "message": "Your account only allows a hardware security key for two-factor sign-in. Bridge can "
+                    "only use one plugged into this Home Assistant machine. Add an authenticator app as a "
+                    "second method in your Proton account, then sign in again."}
         self.login_state = "idle"
         if key == "done":
             return {"state": "done"}
@@ -208,6 +210,20 @@ class Bridge:
             self.restart()
             msg = "Bridge didn't answer in time. Please try again."
         return {"state": "error", "message": msg}
+
+    def wait_login(self, patterns, mark, timeout):
+        """Wait for the next sign-in step; choose the authenticator app when Bridge offers a security key."""
+        while True:
+            key, seg = self.wait_for(patterns, mark, timeout)
+            if key != "key_choice":
+                return key, seg
+            mark = len(self.buf)
+            self.send("no")
+            # Skip the line editor redrawing the question while it echoes the answer.
+            end = time.time() + 10
+            while "\n" not in self.buf[mark:] and time.time() < end:
+                time.sleep(0.1)
+            mark += self.buf[mark:].find("\n") + 1
 
     def login(self, email, password):
         with self.lock:
@@ -226,7 +242,7 @@ class Bridge:
                 return self._login_result(None, "")
             mark = len(self.buf)
             self.send(password)
-            key, seg = self.wait_for(LOGIN_PATTERNS, mark, 90)
+            key, seg = self.wait_login(LOGIN_PATTERNS, mark, 90)
             return self._login_result(key, seg)
 
     def answer(self, value):
@@ -238,7 +254,7 @@ class Bridge:
             patterns = dict(LOGIN_PATTERNS)
             if self.login_state == "need_2fa":
                 patterns.pop("need_2fa")  # a wrong code ends the attempt with "Cannot login"
-            key, seg = self.wait_for(patterns, mark, 90)
+            key, seg = self.wait_login(patterns, mark, 90)
             return self._login_result(key, seg)
 
     def confirm(self, cmd, answer, timeout=30):
