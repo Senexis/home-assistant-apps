@@ -173,6 +173,9 @@ class Bridge:
             return {"done": True}
         m = re.search(r"([\d.]+)%", last)
         eta = re.search(r"ETA: ([\d.]+)s", last)
+        elapsed = re.search(r"Elapsed: ([\d.]+)s", last)
+        if not elapsed or float(elapsed.group(1)) < 30:
+            eta = None  # Bridge's estimate is meaningless right after (re)starting
         return {"done": False, "percent": float(m.group(1)) if m else 0.0,
                 "eta": float(eta.group(1)) if eta else None}
 
