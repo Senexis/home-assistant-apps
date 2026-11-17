@@ -325,7 +325,8 @@ class Bridge:
             return key == "q", seg
 
     def settings(self, fresh=False):
-        if self.settings_cache and not fresh:
+        # Bridge can't report SSL/STARTTLS while an account is still loading; don't keep that gap.
+        if self.settings_cache and not fresh and self.settings_cache.get("imap_ssl") is not None:
             return self.settings_cache
         if self.login_state != "idle":
             raise RuntimeError("Finish or cancel the sign-in first.")

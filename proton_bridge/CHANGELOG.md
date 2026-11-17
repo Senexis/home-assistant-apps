@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.27.2-25
+
+- Fixed: the SSL / STARTTLS choices could show no selection after Bridge restarted.
+- Shorter maintenance text; Restart comes first, as the gentlest option.
+
 ## 3.27.2-24
 
 - IMAP and SMTP connection are SSL / STARTTLS choices, styled like the split/combined choice. Switching IMAP to STARTTLS asks first, because Home Assistant can't use it.
