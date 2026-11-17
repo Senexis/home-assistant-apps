@@ -461,7 +461,7 @@ function accountHtml(a, solo) {
   const status = a.state === "connected"
     ? (syncing ? `<span class="dot sync"></span>Synchronizing (${Math.round(sync.percent)}%)<span class="sbar"><div style="width:${sync.percent}%"></div></span><span data-eta="${esc(a.name)}"></span>`
                : `<span class="dot"></span>Connected`)
-    : a.state === "locked" ? `<span class="dot sync"></span>Loading, try again shortly` : `<span class="dot off"></span>Signed out`;
+    : a.state === "locked" ? `<span class="dot sync"></span>Loading account` : `<span class="dot off"></span>Signed out`;
   const info = mailbox[a.index];
   const title = info && !info.error && info.username && info.username.includes("@") ? info.username : a.name;
   const initial = esc((title || "?").charAt(0).toUpperCase());
@@ -475,6 +475,8 @@ function accountHtml(a, solo) {
     <div class="box"><div class="line"><h3>Mailbox details</h3>${addrPicker(a)}</div><dl class="details">${detailsHtml(a)}</dl></div>
     <div class="btns"><button class="btn tonal" data-act="logout" data-i="${a.index}">Sign out</button>
       <button class="btn danger" data-act="delete" data-i="${a.index}">Remove</button></div>`
+    : a.state === "locked" ? `<div class="btns"><button class="btn tonal" disabled>Sign out</button>
+      <button class="btn danger" disabled>Remove</button></div>`
     : `<div class="btns"><button class="btn" data-act="login" data-i="${a.index}" data-name="${esc(a.name)}">Sign in</button>
       <button class="btn danger" data-act="delete" data-i="${a.index}">Remove</button></div>`;
   return solo

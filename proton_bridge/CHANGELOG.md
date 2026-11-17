@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.27.2-34
+
+- An account that is still loading says "Loading account", and its buttons are disabled until it's ready.
+
 ## 3.27.2-33
 
 - Account names and addresses are always shown, on the page and in the Console. The Bridge password stays hidden until you press Show.
