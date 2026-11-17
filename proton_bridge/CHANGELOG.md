@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.27.2-22
+
+- Wording matches Proton's own Bridge app: Synchronizing, Mailbox details, Hostname, Split addresses, Show All Mail, Collect usage diagnostics, Check now.
+- Clearer Repair and Reset descriptions, including what they mean for Home Assistant.
+
 ## 3.27.2-21
 
 - Updated Debian trixie-slim base image (first run of the daily update check).
