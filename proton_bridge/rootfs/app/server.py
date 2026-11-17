@@ -296,17 +296,32 @@ class Bridge:
             for key, (on_cmd, _off, _label) in SETTINGS.items():
                 asked, _ = self.confirm(on_cmd, "no", timeout=10)
                 values[key] = not asked  # "already ..." means it's on
+            imap, smtp = self._security()
+            values["imap_ssl"] = None if imap is None else imap == "SSL"
+            values["smtp_ssl"] = None if smtp is None else smtp == "SSL"
             self.settings_cache = values
         finally:
             self.lock.release()
         return values
 
+    def _security(self):
+        out = self.command("info 0")
+        imap = re.search(r"IMAP Settings.*?Security:\s*(\S+)", out, re.S)
+        smtp = re.search(r"SMTP Settings.*?Security:\s*(\S+)", out, re.S)
+        return (imap.group(1).upper() if imap else None, smtp.group(1).upper() if smtp else None)
+
     def set_setting(self, key, on):
-        on_cmd, off_cmd, _ = SETTINGS[key]
         if not self.lock.acquire(timeout=3):
             raise RuntimeError("Bridge is busy right now. Try again in a moment.")
         try:
-            self.confirm(on_cmd if on else off_cmd, "yes")
+            if key in ("imap_ssl", "smtp_ssl"):
+                imap, smtp = self._security()
+                current = imap if key == "imap_ssl" else smtp
+                if current and (current == "SSL") != on:
+                    self.confirm("change imap-security" if key == "imap_ssl" else "change smtp-security", "yes")
+            else:
+                on_cmd, off_cmd, _ = SETTINGS[key]
+                self.confirm(on_cmd if on else off_cmd, "yes")
         finally:
             self.lock.release()
         if self.settings_cache:
@@ -316,7 +331,8 @@ class Bridge:
     def account_action(self, action, index):
         cmd = {"logout": "logout", "delete": "delete", "mode": "change mode"}[action]
         _, out = self.confirm(f"{cmd} {int(index)}", "yes", timeout=60)
-        err = [l for l in out.splitlines() if "Cannot" in l or "failed" in l]
+        # Ignore Bridge's own log lines (WARN[...], ERRO[...]); only its answers count.
+        err = [l for l in out.splitlines() if l.lstrip(" >").startswith(("Cannot", "Logging out failed"))]
         return {"ok": not err, "message": err[-1].strip() if err else ""}
 
     def repair(self):
@@ -349,6 +365,23 @@ class Bridge:
             self.console_waiting = not out.rstrip().endswith(">>>")
             return out
 
+    def check_updates(self):
+        with self.lock:
+            mark = len(self.buf)
+            self.send("updates check")
+            key, seg = self.wait_for({"p": "\n>>> ", "p2": "\n >>> "}, mark, 30)
+            time.sleep(1)
+            seg = self.buf[mark:]
+        lines = [l.strip(" >") for l in seg.splitlines()[1:] if l.strip(" >")]
+        return " ".join(lines) or "No answer from Proton's update server."
+
+    def factory_reset(self):
+        with self.lock:
+            self.confirm("clear everything", "yes", timeout=60)
+        self.settings_cache = None
+        self.restart()
+        return {"ok": True}
+
     def imap_security(self, ssl=None):
         """Read (and optionally set) Bridge's IMAP security. Home Assistant's IMAP needs SSL."""
         if self.login_state != "idle":
@@ -368,6 +401,7 @@ SETTINGS = {
     "proxy": ("proxy allow", "proxy disallow", "Alternative routing"),
     "telemetry": ("telemetry enable", "telemetry disable", "Usage diagnostics"),
     "autoupdates": ("updates autoupdates enable", "updates autoupdates disable", "Automatic updates"),
+    "early": ("updates channel early", "updates channel stable", "Early-access updates"),
 }
 
 
@@ -443,6 +477,10 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     self._json({"values": bridge.settings(), "version": bridge.version(),
                                 "labels": {k: v[2] for k, v in SETTINGS.items()}})
+            elif path == "/api/check-updates":
+                self._json({"message": bridge.check_updates()})
+            elif path == "/api/factory-reset":
+                self._json(bridge.factory_reset())
             elif path == "/api/imap-security":
                 self._json({"security": bridge.imap_security(data.get("ssl"))})
             elif path == "/api/repair":
