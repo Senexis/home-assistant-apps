@@ -81,7 +81,7 @@ jobs:
             else
               sha=$(sha256sum /tmp/bridge.deb | cut -d' ' -f1)
               sed -i "s/^ARG BRIDGE_VERSION=.*/ARG BRIDGE_VERSION=${NEW_BRIDGE}/; s/^ARG BRIDGE_SHA256=.*/ARG BRIDGE_SHA256=${sha}/" "$DOCKERFILE"
-              changes+=("Bridge ${CUR_BRIDGE} to ${NEW_BRIDGE}")
+              changes+=("Proton Mail Bridge ${CUR_BRIDGE} to ${NEW_BRIDGE}")
             fi
           fi
 
@@ -103,6 +103,17 @@ jobs:
           fi
           sed -i "s/^version: \".*\"/version: \"${new_app}\"/" "$CONFIG"
 
+          # Changelog entry, newest first, so Home Assistant's update dialog shows what changed.
+          python3 - "$new_app" "${changes[@]}" <<'PY'
+          import sys
+          p = "proton_bridge/CHANGELOG.md"
+          ver, items = sys.argv[1], sys.argv[2:]
+          s = open(p).read()
+          head = "# Changelog\n\n"
+          entry = f"## {ver}\n\n" + "".join(f"- Updated {i}.\n" for i in items) + "\n"
+          open(p, "w").write(head + entry + s[len(head):] if s.startswith(head) else head + entry + s)
+          PY
+
           msg="Update $(IFS=,; echo "${changes[*]}" | sed 's/,/ and /g') (app ${new_app})"
           echo "$msg" >> "$GITHUB_STEP_SUMMARY"
           { echo "changed=true"; echo "message=$msg"; } >> "$GITHUB_OUTPUT"
@@ -120,5 +131,6 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -am "$MESSAGE"
+          git add -A proton_bridge
+          git commit -m "$MESSAGE"
           git push origin HEAD:main
