@@ -523,6 +523,7 @@ $("restart").onclick = async () => { const b = $("restart"); busy(b, true, "Rest
 
 // Console: a live view of Bridge's terminal.
 let consoleTimer = null, consoleText = "";
+const consoleReveals = [];  // [masked, full] for output of commands typed in this page
 const ANSI_COLORS = ["#5c6b70", "#f2867e", "#81c784", "#f0c674", "#7cb7ff", "#d197f2", "#4fc3cf", "#d6e2e5"];
 function ansiToHtml(text) {
   let html = "", bold = false, color = null, open = false;
@@ -548,7 +549,9 @@ async function pollConsole() {
   try {
     const r = await api("api/screen");
     const atBottom = out.scrollHeight - out.scrollTop - out.clientHeight < 40;
-    if (consoleText !== r.text) { consoleText = r.text; out.innerHTML = ansiToHtml(r.text); if (atBottom) out.scrollTop = out.scrollHeight; }
+    let text = r.text;
+    for (const [masked, full] of consoleReveals) text = text.split(masked).join(full);
+    if (consoleText !== text) { consoleText = text; out.innerHTML = ansiToHtml(text); if (atBottom) out.scrollTop = out.scrollHeight; }
   } catch { /* app restarting */ }
 }
 function consoleActive(on) {
@@ -561,6 +564,7 @@ $("console-form").onsubmit = async (e) => {
   const line = $("console-in").value; $("console-in").value = "";
   const r = await api("api/console", { line });
   if (r.state === "error") $("console-out").textContent += "\n[" + r.message + "]\n";
+  if (r.reveal) consoleReveals.push(r.reveal);
   await pollConsole(); $("console-out").scrollTop = $("console-out").scrollHeight;
 };
 

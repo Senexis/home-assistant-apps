@@ -409,21 +409,33 @@ class Bridge:
         if not self.lock.acquire(timeout=5):
             raise RuntimeError("Bridge is busy right now. Try again in a moment.")
         try:
-            mark = len(self.buf)
+            mark, raw_mark = len(self.buf), len(self.rawbuf)
             self.send(line)
-            self.wait_for({"q": "yes/no: ", "p": "\n>>> ", "p2": "\n >>> ", "c": ": "}, mark, 3)
+            self.wait_for({"q": "yes/no: ", "p": "\n>>> ", "p2": "\n >>> ", "c": ": "}, mark, 10)
+            time.sleep(0.2)
             tail = self.buf[-200:].rstrip(" ")
             # Bridge is waiting for an answer: keep the page's own commands out of the way.
             self.console_waiting = not tail.endswith(">>>")
+            segment = self.rawbuf[raw_mark:]
         finally:
             self.lock.release()
-        return {"ok": True}
+        # What you typed yourself is shown in full, but only in the page you typed it in:
+        # the shared scrollback stays masked, so it's masked again after a reload.
+        nl = segment.find("\n")
+        full = self._render(segment[nl + 1:]) if nl >= 0 else ""
+        full = full.rsplit("\n", 1)[0] if "\n" in full else full  # drop the next prompt
+        masked = self._mask(full)
+        return {"ok": True, "reveal": [masked, full] if masked != full and full.strip() else None}
 
     def transcript(self):
         """Bridge's terminal as the Console shows it: colours kept, the line editor's redraws
-        collapsed, and the page's own status polls and sync progress left out."""
+        collapsed, the page's own reads and sync progress left out, secrets masked."""
+        return self._mask(self._render(self.rawbuf[-150_000:]))
+
+    @staticmethod
+    def _render(text):
         out, skipping = [], False
-        for raw in self.rawbuf[-150_000:].split("\n"):
+        for raw in text.split("\n"):
             plain = SGR.sub("", raw)
             for token in (">>> ", "yes/no: "):
                 first = plain.find(token)
@@ -436,14 +448,12 @@ class Bridge:
             if plain.startswith(">>> "):
                 # The page's own reads end in a space: hide them and their output.
                 skipping = plain[4:].endswith(" ") and plain[4:].strip() != ""
-            if skipping and not plain.startswith(">>> "):
-                continue
             if skipping:
                 continue
             if body.startswith(("Sync (", "A sync has")):
                 continue
             out.append(raw)
-        return self._mask("\n".join(out))
+        return "\n".join(out)
 
     def _mask(self, text):
         """Hide secrets in anything Bridge prints: the part of an address before @, account
