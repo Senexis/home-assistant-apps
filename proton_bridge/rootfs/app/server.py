@@ -42,6 +42,7 @@ class Bridge:
         self.lock = threading.RLock()
         self.proc_lock = threading.Lock()
         self.settings_cache = None
+        self.console_waiting = False  # the console left Bridge waiting for an answer
         self.buf = ""
         self.fd = None
         self.pid = None
@@ -150,7 +151,7 @@ class Bridge:
 
     # --- features ------------------------------------------------------------
     def accounts(self):
-        if self.login_state != "idle" or not self.lock.acquire(timeout=1):
+        if self.login_state != "idle" or self.console_waiting or not self.lock.acquire(timeout=1):
             return self.cache["accounts"]
         try:
             out = self.command("list")
@@ -338,7 +339,22 @@ class Bridge:
             time.sleep(0.3)
             seg = self.buf[mark:]
             first_nl = seg.find("\n")
-            return seg[first_nl + 1:] if first_nl >= 0 else ""
+            out = seg[first_nl + 1:] if first_nl >= 0 else seg
+            self.console_waiting = not out.rstrip().endswith(">>>")
+            return out
+
+    def imap_security(self, ssl=None):
+        """Read (and optionally set) Bridge's IMAP security. Home Assistant's IMAP needs SSL."""
+        if self.login_state != "idle":
+            raise RuntimeError("Finish or cancel the sign-in first.")
+        with self.lock:
+            out = self.command("info 0")
+            m = re.search(r"IMAP Settings.*?Security:\s*(\S+)", out, re.S)
+            current = m.group(1).upper() if m else None
+            if ssl is not None and current and (current == "SSL") != ssl:
+                self.confirm("change imap-security", "yes")
+                current = "SSL" if ssl else "STARTTLS"
+        return current
 
 
 SETTINGS = {
@@ -421,6 +437,8 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     self._json({"values": bridge.settings(), "version": bridge.version(),
                                 "labels": {k: v[2] for k, v in SETTINGS.items()}})
+            elif path == "/api/imap-security":
+                self._json({"security": bridge.imap_security(data.get("ssl"))})
             elif path == "/api/repair":
                 self._json(bridge.repair())
             elif path == "/api/restart":

@@ -275,7 +275,7 @@ async function showImap(index) {
   $("imap").innerHTML = `<dl>
     <dt>Server</dt><dd><code>${esc(info.host)}</code></dd>
     <dt>Port</dt><dd><code>${esc(info.port)}</code></dd>
-    <dt>Security</dt><dd>STARTTLS, with certificate check off</dd>
+    <dt>Security</dt><dd>${esc(info.security === "SSL" ? "SSL/TLS" : info.security)}, with certificate check off</dd>
     <dt>Username</dt><dd><code>${esc(info.username)}</code> <button class="link" data-copy="${esc(info.username)}">Copy</button></dd>
     <dt>Password</dt><dd><code id="pw" data-pw="${esc(info.password)}">••••••••••••</code>
       <button class="link" id="pw-show">Show</button> <button class="link" data-copy="${esc(info.password)}">Copy</button></dd>
@@ -375,10 +375,15 @@ async function loadSettings() {
   const r = await api("api/settings", {});
   if (r.state === "error") { $("settings").innerHTML = `<div class="msg err">${esc(r.message)}</div>`; return; }
   $("version").textContent = "Bridge " + r.version;
+  const sec = await api("api/imap-security", {});
+  const secRow = sec.security ? `<div class="toggle"><div>IMAP over SSL<small>Home Assistant's IMAP integration needs this on. Off means STARTTLS.</small></div>
+      <label class="switch"><input type="checkbox" id="imap-ssl" ${sec.security === "SSL" ? "checked" : ""}><span></span></label></div>` : "";
   $("settings").innerHTML = Object.entries(r.values).map(([k, on]) => `
     <div class="toggle"><div>${esc(r.labels[k])}<small>${esc(HELP[k] || "")}</small></div>
-      <label class="switch"><input type="checkbox" data-key="${k}" ${on ? "checked" : ""}><span></span></label></div>`).join("");
-  $("settings").querySelectorAll("input").forEach((i) => i.onchange = async () => {
+      <label class="switch"><input type="checkbox" data-key="${k}" ${on ? "checked" : ""}><span></span></label></div>`).join("") + secRow;
+  if ($("imap-ssl")) $("imap-ssl").onchange = async (e) => { e.target.disabled = true;
+    await api("api/imap-security", { ssl: e.target.checked }); e.target.disabled = false; imapShownFor = null; refresh(); };
+  $("settings").querySelectorAll("input[data-key]").forEach((i) => i.onchange = async () => {
     i.disabled = true; await api("api/settings", { key: i.dataset.key, on: i.checked }); i.disabled = false;
   });
 }

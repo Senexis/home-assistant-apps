@@ -19,4 +19,4 @@ Updating Bridge is done by changing the pinned version in the Dockerfile.
 - **Server:** this app's hostname (shown on the app's Info page, e.g. `xxxxxxxx-proton-bridge`)
 - **Port:** `9143`
 - **Username / password:** from `info` in the Bridge panel
-- **Security:** STARTTLS, with certificate verification off (Bridge uses a self-signed certificate on the internal network)
+- **Security:** SSL (turn on **IMAP over SSL** in Settings; Home Assistant has no STARTTLS), with certificate verification off (Bridge uses a self-signed certificate)
