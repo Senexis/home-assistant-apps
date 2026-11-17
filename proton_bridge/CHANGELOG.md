@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.27.2-28
+
+- Fixed: Restart, Repair, Reset and Check now had their labels pushed to the right.
+- Accounts show their full address (masked) instead of only the user name.
+- Smaller account and settings buttons.
+
 ## 3.27.2-27
 
 - Better support for several accounts: each account has its own row with its address mode and its own Mailbox details. With two or more accounts the rows start folded.
