@@ -27,10 +27,5 @@ fi
 # Bridge only listens on 127.0.0.1:1143; expose it to Home Assistant on the internal network.
 socat TCP-LISTEN:9143,fork,reuseaddr TCP:127.0.0.1:1143 &
 
-# Bridge's interactive CLI runs in a persistent tmux session (restarted if it exits).
-tmux new-session -d -s bridge /usr/local/bin/bridge-loop.sh
-
-# Web terminal for the Ingress panel; nginx only accepts the Home Assistant ingress proxy.
-nginx
-exec ttyd --interface /run/ttyd.sock --socket-owner www-data:www-data --writable \
-     tmux attach-session -t bridge
+# The web UI (Ingress only) runs Bridge's CLI itself and restarts it if it exits.
+exec python3 -u /app/server.py

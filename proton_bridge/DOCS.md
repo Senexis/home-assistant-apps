@@ -5,11 +5,13 @@ IMAP integration can read your inbox. IMAP is only reachable from Home Assistant
 on port 9143 of this app's internal hostname. Nothing is opened on your network.
 
 ## First login
-1. Open **Proton Bridge** in the sidebar. You get Bridge's command line.
-2. Type `login` and follow the prompts (email, password, 2FA code).
-3. Type `info` and note the IMAP **username** and the Bridge-generated **password**.
+1. Open **Proton Bridge** from the app page (**Open web UI**) or turn on **Show in sidebar**.
+2. Sign in with your Proton email and password, then your two-factor code (and mailbox password, if you use one).
+3. Once signed in, the **Home Assistant connection** card shows the IMAP username and the Bridge-generated password.
    That password is not your Proton password; it only works against this Bridge.
-4. Leave the panel. Bridge keeps running in the background.
+
+The **Settings** tab covers the All Mail folder, alternative routing, usage diagnostics, automatic updates,
+repair and restart. The **Console** tab gives you Bridge's own command line for everything else.
 
 Updating Bridge is done by changing the pinned version in the Dockerfile.
 

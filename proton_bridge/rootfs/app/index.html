@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Proton Mail Bridge</title>
+<style>
+:root {
+  --bg: #f4f7f8; --card: #ffffff; --text: #1b2326; --muted: #5d6b70; --line: #dde5e8;
+  --accent: #00838f; --accent-soft: #e0f2f4; --ok: #2e7d32; --ok-soft: #e6f2e7;
+  --warn: #a15c00; --warn-soft: #fbefdc; --err: #b3261e; --err-soft: #f9e3e1; --field: #f4f7f8;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111416; --card: #1b2023; --text: #e3e8ea; --muted: #9aa8ad; --line: #2c3438;
+    --accent: #4fc3cf; --accent-soft: #163236; --ok: #81c784; --ok-soft: #1c2e1e;
+    --warn: #f0b35a; --warn-soft: #33281a; --err: #f2867e; --err-soft: #3a1f1d; --field: #14181a;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 15px/1.5 Roboto, "Segoe UI", system-ui, sans-serif; }
+main { max-width: 720px; margin: 0 auto; padding: 24px 16px 48px; }
+header { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
+.logo { width: 44px; height: 44px; border-radius: 50%; background: var(--accent-soft); color: var(--accent);
+  display: grid; place-items: center; flex: none; }
+h1 { font-size: 22px; font-weight: 500; margin: 0; }
+.sub { color: var(--muted); font-size: 13px; }
+.chip { margin-left: auto; padding: 4px 12px; border-radius: 999px; font-size: 13px; font-weight: 500;
+  background: var(--line); color: var(--muted); white-space: nowrap; }
+.chip.ok { background: var(--ok-soft); color: var(--ok); }
+.chip.warn { background: var(--warn-soft); color: var(--warn); }
+nav { display: flex; gap: 6px; margin-bottom: 16px; }
+nav button { flex: 1; background: transparent; color: var(--muted); border: 0; border-radius: 999px;
+  padding: 9px 0; font: inherit; font-weight: 500; cursor: pointer; }
+nav button.on { background: var(--accent-soft); color: var(--accent); }
+.card { background: var(--card); border-radius: 20px; padding: 20px; margin-bottom: 14px;
+  border: 1px solid var(--line); }
+.card h2 { font-size: 16px; font-weight: 500; margin: 0 0 4px; }
+.card p { margin: 0 0 14px; color: var(--muted); font-size: 14px; }
+label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+input { width: 100%; padding: 11px 14px; border-radius: 12px; border: 1px solid var(--line);
+  background: var(--field); color: var(--text); font: inherit; }
+input:focus { outline: 2px solid var(--accent); border-color: transparent; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+button.btn { border: 0; border-radius: 999px; padding: 10px 20px; font: inherit; font-weight: 500;
+  cursor: pointer; background: var(--accent); color: var(--card); }
+button.btn.tonal { background: var(--accent-soft); color: var(--accent); }
+button.btn.danger { background: var(--err-soft); color: var(--err); }
+button.btn:disabled { opacity: .5; cursor: default; }
+.msg { border-radius: 12px; padding: 10px 14px; font-size: 14px; margin-top: 12px; }
+.msg.err { background: var(--err-soft); color: var(--err); }
+.msg.ok { background: var(--ok-soft); color: var(--ok); }
+.msg.info { background: var(--accent-soft); color: var(--accent); }
+dl { display: grid; grid-template-columns: max-content 1fr; gap: 8px 16px; margin: 0; font-size: 14px; }
+dt { color: var(--muted); }
+dd { margin: 0; display: flex; gap: 8px; align-items: center; min-width: 0; }
+dd code { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 13px;
+  background: var(--field); padding: 2px 8px; border-radius: 8px; overflow-wrap: anywhere; }
+.link { background: none; border: 0; color: var(--accent); font: inherit; font-size: 13px; cursor: pointer; padding: 0; }
+.account { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); }
+.account:first-of-type { border-top: 0; }
+.account .name { font-weight: 500; overflow-wrap: anywhere; }
+.toggle { display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 12px 0; border-top: 1px solid var(--line); }
+.toggle:first-of-type { border-top: 0; }
+.toggle small { display: block; color: var(--muted); font-size: 13px; }
+.switch { position: relative; width: 48px; height: 28px; flex: none; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.switch span { position: absolute; inset: 0; border-radius: 999px; background: var(--line); cursor: pointer; transition: .2s; }
+.switch span::after { content: ""; position: absolute; width: 20px; height: 20px; left: 4px; top: 4px;
+  border-radius: 50%; background: var(--card); transition: .2s; }
+.switch input:checked + span { background: var(--accent); }
+.switch input:checked + span::after { transform: translateX(20px); }
+.bar { height: 6px; border-radius: 6px; background: var(--line); overflow: hidden; margin-top: 8px; }
+.bar div { height: 100%; background: var(--accent); }
+pre { background: var(--field); border-radius: 12px; padding: 12px; margin: 0 0 10px; max-height: 360px;
+  overflow: auto; font: 12.5px/1.45 ui-monospace, "Cascadia Mono", Consolas, monospace; white-space: pre-wrap; }
+.hidden { display: none !important; }
+.spin { display: inline-block; width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent;
+  border-radius: 50%; animation: s 1s linear infinite; vertical-align: -2px; margin-right: 6px; }
+@keyframes s { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="logo"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h9.1a6 6 0 0 1-.1-1 6 6 0 0 1 9-5.2V6a2 2 0 0 0-2-2Zm0 4-8 5-8-5V6l8 5 8-5Zm1.5 9V16a2.5 2.5 0 0 0-5 0v1a1 1 0 0 0-1 1v3a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1Zm-1 0h-3v-1a1.5 1.5 0 0 1 3 0Z"/></svg></div>
+    <div><h1>Proton Mail Bridge</h1><div class="sub" id="version">Connects your inbox to Home Assistant</div></div>
+    <span class="chip" id="chip">Loading…</span>
+  </header>
+
+  <nav>
+    <button data-tab="account" class="on">Account</button>
+    <button data-tab="settings">Settings</button>
+    <button data-tab="console">Console</button>
+  </nav>
+
+  <section id="tab-account">
+    <div class="card hidden" id="signin">
+      <h2>Sign in to Proton</h2>
+      <p>Your password goes straight to Bridge on this Home Assistant and isn't stored by this page.</p>
+      <form id="login-form">
+        <label for="email">Email</label>
+        <input id="email" type="email" autocomplete="username" required>
+        <label for="password">Password</label>
+        <input id="password" type="password" autocomplete="current-password" required>
+        <div class="row"><button class="btn" type="submit">Sign in</button></div>
+      </form>
+      <form id="step-form" class="hidden">
+        <label for="step-input" id="step-label"></label>
+        <input id="step-input" autocomplete="one-time-code" required>
+        <div class="row">
+          <button class="btn" type="submit">Continue</button>
+          <button class="btn tonal" type="button" id="cancel">Cancel</button>
+        </div>
+      </form>
+      <div id="hv" class="hidden">
+        <p>Proton wants to check you're human. Open the link, complete the check, then come back here.</p>
+        <div class="row">
+          <a class="btn" id="hv-link" target="_blank" rel="noopener" style="text-decoration:none">Open check</a>
+          <button class="btn tonal" id="hv-done">I've done it</button>
+          <button class="btn tonal" id="hv-cancel">Cancel</button>
+        </div>
+      </div>
+      <div id="login-msg"></div>
+    </div>
+
+    <div class="card hidden" id="accounts-card">
+      <h2>Accounts</h2>
+      <div id="accounts"></div>
+      <div class="row"><button class="btn tonal" id="add-account">Add another account</button></div>
+    </div>
+
+    <div class="card hidden" id="imap-card">
+      <h2>Home Assistant connection</h2>
+      <p>Use these in the IMAP integration. The password is generated by Bridge, not your Proton password.</p>
+      <div id="imap"></div>
+    </div>
+  </section>
+
+  <section id="tab-settings" class="hidden">
+    <div class="card">
+      <h2>Bridge settings</h2>
+      <div id="settings"><span class="spin"></span>Reading settings…</div>
+    </div>
+    <div class="card">
+      <h2>Maintenance</h2>
+      <p>Repair reloads all accounts and downloads your mail again. Restart only restarts Bridge.</p>
+      <div class="row">
+        <button class="btn tonal" id="repair">Repair</button>
+        <button class="btn tonal" id="restart">Restart Bridge</button>
+      </div>
+      <div id="maint-msg"></div>
+    </div>
+  </section>
+
+  <section id="tab-console" class="hidden">
+    <div class="card">
+      <h2>Console</h2>
+      <p>Everything else Bridge can do. Type <code>help</code> for the list; answer questions with yes or no.</p>
+      <pre id="console-out"></pre>
+      <form id="console-form" style="display:flex;gap:8px">
+        <input id="console-in" placeholder="Command" autocomplete="off" spellcheck="false">
+        <button class="btn" type="submit">Send</button>
+      </form>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const api = async (path, body) => {
+  const res = await fetch(path, body === undefined ? {} :
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  return res.json();
+};
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const msg = (el, kind, text) => { $(el).innerHTML = text ? `<div class="msg ${kind}">${text}</div>` : ""; };
+const busy = (btn, on, label) => { btn.disabled = on; if (on) { btn.dataset.l = btn.innerHTML; btn.innerHTML = `<span class="spin"></span>${label}`; } else if (btn.dataset.l) btn.innerHTML = btn.dataset.l; };
+
+let state = { accounts: [], login_state: "idle" };
+let addingAccount = false;
+let imapShownFor = null;
+
+// Tabs
+document.querySelectorAll("nav button").forEach((b) => b.onclick = () => {
+  document.querySelectorAll("nav button").forEach((x) => x.classList.toggle("on", x === b));
+  ["account", "settings", "console"].forEach((t) => $("tab-" + t).classList.toggle("hidden", t !== b.dataset.tab));
+  if (b.dataset.tab === "settings") loadSettings();
+});
+
+// Status
+async function refresh() {
+  try { state = await api("api/status"); } catch { return; }
+  const connected = state.accounts.filter((a) => a.state === "connected");
+  const sync = state.sync;
+  const chip = $("chip");
+  if (!state.accounts.length) { chip.textContent = "Not signed in"; chip.className = "chip warn"; }
+  else if (sync && !sync.done) { chip.textContent = `Syncing ${Math.round(sync.percent)}%`; chip.className = "chip"; }
+  else if (connected.length) { chip.textContent = "Connected"; chip.className = "chip ok"; }
+  else { chip.textContent = "Signed out"; chip.className = "chip warn"; }
+
+  const showSignin = !state.accounts.length || addingAccount || state.login_state !== "idle";
+  $("signin").classList.toggle("hidden", !showSignin);
+  $("accounts-card").classList.toggle("hidden", !state.accounts.length);
+  $("imap-card").classList.toggle("hidden", !connected.length);
+
+  $("accounts").innerHTML = state.accounts.map((a) => `
+    <div class="account">
+      <div style="flex:1;min-width:0">
+        <div class="name">${esc(a.name)}</div>
+        <div class="sub">${esc(a.state === "connected" ? "Connected" : a.state === "locked" ? "Locked, try again shortly" : "Signed out")} · ${esc(a.mode)} addresses</div>
+        ${sync && !sync.done && a.state === "connected" ? `<div class="bar"><div style="width:${sync.percent}%"></div></div>` : ""}
+      </div>
+      ${a.state === "connected"
+        ? `<button class="btn tonal" data-act="mode" data-i="${a.index}" title="Switch between one inbox for all addresses (combined) and one per address (split)">${a.mode === "combined" ? "Split" : "Combine"}</button>
+           <button class="btn tonal" data-act="logout" data-i="${a.index}">Sign out</button>`
+        : `<button class="btn" data-act="login" data-i="${a.index}" data-name="${esc(a.name)}">Sign in</button>`}
+      <button class="btn danger" data-act="delete" data-i="${a.index}">Remove</button>
+    </div>`).join("");
+  if (connected.length && imapShownFor !== connected[0].index) showImap(connected[0].index);
+}
+
+async function showImap(index) {
+  imapShownFor = index;
+  const info = await api("api/imap", { index });
+  if (info.error) { $("imap").innerHTML = `<p>${esc(info.error)}</p>`; imapShownFor = null; return; }
+  $("imap").innerHTML = `<dl>
+    <dt>Server</dt><dd><code>${esc(info.host)}</code></dd>
+    <dt>Port</dt><dd><code>${esc(info.port)}</code></dd>
+    <dt>Security</dt><dd>STARTTLS, with certificate check off</dd>
+    <dt>Username</dt><dd><code>${esc(info.username)}</code> <button class="link" data-copy="${esc(info.username)}">Copy</button></dd>
+    <dt>Password</dt><dd><code id="pw" data-pw="${esc(info.password)}">••••••••••••</code>
+      <button class="link" id="pw-show">Show</button> <button class="link" data-copy="${esc(info.password)}">Copy</button></dd>
+  </dl>`;
+  $("pw-show").onclick = () => { const pw = $("pw"); const shown = pw.textContent === pw.dataset.pw;
+    pw.textContent = shown ? "••••••••••••" : pw.dataset.pw; $("pw-show").textContent = shown ? "Show" : "Hide"; };
+}
+
+document.addEventListener("click", async (e) => {
+  const c = e.target.closest("[data-copy]");
+  if (c) {
+    try { await navigator.clipboard.writeText(c.dataset.copy); c.textContent = "Copied"; }
+    catch { c.textContent = "Select and copy"; }
+    setTimeout(() => (c.textContent = "Copy"), 1500);
+    return;
+  }
+  const b = e.target.closest("[data-act]");
+  if (!b) return;
+  const act = b.dataset.act, index = +b.dataset.i;
+  if (act === "login") { addingAccount = true; $("email").value = b.dataset.name; refresh(); return; }
+  if ((act === "delete" || act === "logout") && b.dataset.sure !== "1") {
+    b.dataset.sure = "1"; b.textContent = "Sure?"; setTimeout(() => { b.dataset.sure = ""; refresh(); }, 4000); return;
+  }
+  busy(b, true, "");
+  const r = await api("api/account", { action: act, index });
+  if (!r.ok && r.message) alertCard(r.message);
+  imapShownFor = null;
+  refresh();
+});
+const alertCard = (text) => { msg("login-msg", "err", esc(text)); $("signin").classList.remove("hidden"); };
+
+$("add-account").onclick = () => { addingAccount = true; $("email").value = ""; refresh(); $("email").focus(); };
+
+// Sign-in flow
+function showStep(r) {
+  $("login-form").classList.toggle("hidden", ["need_2fa", "need_mailbox", "need_hv"].includes(r.state));
+  $("step-form").classList.toggle("hidden", !["need_2fa", "need_mailbox"].includes(r.state));
+  $("hv").classList.toggle("hidden", r.state !== "need_hv");
+  msg("login-msg", "", "");
+  if (r.state === "need_2fa") {
+    $("step-label").textContent = "Two-factor code from your authenticator app";
+    $("step-input").type = "text"; $("step-input").inputMode = "numeric"; $("step-input").value = ""; $("step-input").focus();
+  } else if (r.state === "need_mailbox") {
+    $("step-label").textContent = "Mailbox password";
+    $("step-input").type = "password"; $("step-input").inputMode = "text"; $("step-input").value = ""; $("step-input").focus();
+  } else if (r.state === "need_hv") {
+    $("hv-link").href = r.url || "#";
+  } else if (r.state === "done") {
+    $("password").value = ""; addingAccount = false;
+    msg("login-msg", "ok", "Signed in. Bridge is now downloading your mail; this can take a while the first time.");
+  } else if (r.state === "error") {
+    msg("login-msg", "err", esc(r.message));
+  }
+  refresh();
+}
+
+$("login-form").onsubmit = async (e) => {
+  e.preventDefault();
+  const btn = e.submitter; busy(btn, true, "Signing in…");
+  msg("login-msg", "", "");
+  try { showStep(await api("api/login", { email: $("email").value.trim(), password: $("password").value })); }
+  finally { busy(btn, false); }
+};
+$("step-form").onsubmit = async (e) => {
+  e.preventDefault();
+  const btn = e.submitter; busy(btn, true, "Checking…");
+  try { showStep(await api("api/answer", { value: $("step-input").value.trim() })); }
+  finally { busy(btn, false); $("step-input").value = ""; }
+};
+$("hv-done").onclick = async () => { busy($("hv-done"), true, "Checking…");
+  try { showStep(await api("api/answer", { value: "" })); } finally { busy($("hv-done"), false); } };
+const cancel = async () => { await api("api/cancel", {}); addingAccount = false; showStep({ state: "idle" }); };
+$("cancel").onclick = cancel; $("hv-cancel").onclick = cancel;
+
+// Settings
+const HELP = {
+  all_mail: "Lists the All Mail folder in the mailbox Home Assistant sees.",
+  proxy: "Lets Bridge reach Proton through a third party if Proton is blocked on your network.",
+  telemetry: "Sends anonymous usage statistics to Proton.",
+  autoupdates: "Bridge can't install updates inside this app; update the app instead. Best left off.",
+};
+async function loadSettings() {
+  $("settings").innerHTML = `<span class="spin"></span>Reading settings…`;
+  const r = await api("api/settings", {});
+  if (r.state === "error") { $("settings").innerHTML = `<div class="msg err">${esc(r.message)}</div>`; return; }
+  $("version").textContent = "Bridge " + r.version;
+  $("settings").innerHTML = Object.entries(r.values).map(([k, on]) => `
+    <div class="toggle"><div>${esc(r.labels[k])}<small>${esc(HELP[k] || "")}</small></div>
+      <label class="switch"><input type="checkbox" data-key="${k}" ${on ? "checked" : ""}><span></span></label></div>`).join("");
+  $("settings").querySelectorAll("input").forEach((i) => i.onchange = async () => {
+    i.disabled = true; await api("api/settings", { key: i.dataset.key, on: i.checked }); i.disabled = false;
+  });
+}
+$("repair").onclick = async () => {
+  const b = $("repair");
+  if (b.dataset.sure !== "1") { b.dataset.sure = "1"; b.textContent = "Sure? This can take a while"; return; }
+  b.dataset.sure = ""; busy(b, true, "Starting…");
+  const r = await api("api/repair", {}); busy(b, false); b.textContent = "Repair";
+  msg("maint-msg", r.ok ? "ok" : "err", r.ok ? "Repair started." : esc(r.message));
+};
+$("restart").onclick = async () => { const b = $("restart"); busy(b, true, "Restarting…");
+  await api("api/restart", {}); busy(b, false); msg("maint-msg", "ok", "Bridge restarted."); imapShownFor = null; setTimeout(refresh, 4000); };
+
+// Console
+$("console-form").onsubmit = async (e) => {
+  e.preventDefault();
+  const line = $("console-in").value; $("console-in").value = "";
+  const out = $("console-out");
+  out.textContent += ">>> " + line + "\n";
+  const r = await api("api/console", { line });
+  out.textContent += (r.output ?? r.message ?? "") .replace(/\n?>>> $/, "") + "\n";
+  out.scrollTop = out.scrollHeight;
+};
+
+refresh();
+setInterval(() => { if (state.login_state === "idle" && $("step-form").classList.contains("hidden")) refresh(); }, 10000);
+</script>
+</body>
+</html>
