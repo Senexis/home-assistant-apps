@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.27.2-31
+
+- The Console no longer shows the empty `>>>` prompts Bridge prints after each sync update.
+
 ## 3.27.2-30
 
 - Sync progress and time left are tracked per account.

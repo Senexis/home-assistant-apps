@@ -472,6 +472,10 @@ class Bridge:
                 continue
             if body.startswith(("Sync (", "A sync has")):
                 continue
+            # Bridge reprints an empty prompt after anything it prints on its own (like sync
+            # progress); the page has its own input line, so those are noise.
+            if plain.strip() == ">>>":
+                continue
             out.append(raw)
         return "\n".join(out)
 
