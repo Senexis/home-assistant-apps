@@ -20,6 +20,7 @@ from pathlib import Path
 INGRESS_IP = os.environ.get("UI_ALLOW_IP", "172.30.32.2")
 PORT = 8099
 IMAP_PORT = 9143
+SMTP_PORT = 9025
 BRIDGE = os.environ.get("UI_BRIDGE", "/usr/local/bin/bridge --cli").split()
 import hashlib
 _index = Path(__file__).with_name("index.html").read_bytes()
@@ -229,8 +230,10 @@ class Bridge:
         m = re.search(r"IMAP Settings.*?Username:\s*(\S+).*?Password:\s*(\S+).*?Security:\s*(\S+)", out, re.S)
         if not m:
             return None
-        return {"host": socket.gethostname(), "port": IMAP_PORT,
-                "username": m.group(1), "password": m.group(2), "security": m.group(3)}
+        smtp = re.search(r"SMTP Settings.*?Security:\s*(\S+)", out, re.S)
+        return {"host": socket.gethostname(), "port": IMAP_PORT, "smtp_port": SMTP_PORT,
+                "username": m.group(1), "password": m.group(2), "security": m.group(3),
+                "smtp_security": smtp.group(1) if smtp else None}
 
     def _login_result(self, key, seg):
         if key in ("need_2fa", "need_mailbox"):

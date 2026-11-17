@@ -4,7 +4,7 @@ Personal Home Assistant apps (add-ons).
 
 | App | Description |
 |---|---|
-| [Proton Mail Bridge](proton_bridge/) | Proton's official Bridge, so Home Assistant's IMAP integration can read a Proton Mail inbox. Only reachable inside Home Assistant. |
+| [Proton Mail Bridge](proton_bridge/) | Proton's official Bridge, so Home Assistant can read (IMAP) and send (SMTP) Proton Mail. Only reachable inside Home Assistant. |
 
 ## Install
 

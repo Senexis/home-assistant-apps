@@ -1,7 +1,7 @@
 name: Proton Mail Bridge
-version: "3.27.2-17"
+version: "3.27.2-18"
 slug: proton_bridge
-description: Proton's official Bridge, so Home Assistant's IMAP integration can read your inbox. Only reachable inside Home Assistant.
+description: Proton's official Bridge, so Home Assistant can read (IMAP) and send (SMTP) Proton Mail. Only reachable inside Home Assistant.
 url: https://proton.me/mail/bridge
 arch:
   - amd64
@@ -14,5 +14,5 @@ ingress_port: 8099
 panel_icon: mdi:email-lock
 panel_title: Proton Bridge
 panel_admin: true
-# No host ports on purpose: IMAP is only reachable from Home Assistant
-# on the internal hassio network (port 9143).
+# No host ports on purpose: IMAP (9143) and SMTP (9025) are only reachable
+# from Home Assistant on the internal hassio network.

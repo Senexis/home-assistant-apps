@@ -24,8 +24,9 @@ if [ ! -f "$PREFS" ]; then
   printf '{"preferred_keychain":"pass"}\n' > "$PREFS"
 fi
 
-# Bridge only listens on 127.0.0.1:1143; expose it to Home Assistant on the internal network.
+# Bridge only listens on 127.0.0.1 (IMAP 1143, SMTP 1025); expose both to Home Assistant on the internal network.
 socat TCP-LISTEN:9143,fork,reuseaddr TCP:127.0.0.1:1143 &
+socat TCP-LISTEN:9025,fork,reuseaddr TCP:127.0.0.1:1025 &
 
 # The web UI (Ingress only) runs Bridge's CLI itself and restarts it if it exits.
 exec python3 -u /app/server.py
