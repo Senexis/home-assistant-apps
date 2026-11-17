@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.27.2-32
+
+- The last minute of a sync shows "Less than a minute left" instead of seconds.
+
 ## 3.27.2-31
 
 - The Console no longer shows the empty `>>>` prompts Bridge prints after each sync update.

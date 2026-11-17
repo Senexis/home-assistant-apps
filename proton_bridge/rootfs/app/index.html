@@ -376,9 +376,10 @@ function trackEtas(syncs) {
 function etaText(name) {
   const e = etas[name]; if (!e) return "";
   const s = Math.max(0, Math.round((e.end - Date.now()) / 1000));
-  if (!s) return "Almost done";
+  // Bridge's last-minute estimates jump around, so the final minute isn't counted in seconds.
+  if (s < 60) return "Less than a minute left";
   const h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, sec = s % 60, pad = (n) => String(n).padStart(2, "0");
-  return (h ? `${h}h ${pad(m)}m ${pad(sec)}s` : m ? `${m}m ${pad(sec)}s` : `${sec}s`) + " left";
+  return (h ? `${h}h ${pad(m)}m ${pad(sec)}s` : `${m}m ${pad(sec)}s`) + " left";
 }
 function tickEta() {
   document.querySelectorAll("[data-eta]").forEach((e) => {
