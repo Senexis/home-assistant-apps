@@ -43,11 +43,11 @@ input { width: 100%; padding: 11px 14px; border-radius: 12px; border: 1px solid 
   background: var(--field); color: var(--text); font: inherit; }
 input:focus { outline: 2px solid var(--accent); border-color: transparent; }
 .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
-button.btn { border: 0; border-radius: 999px; padding: 10px 20px; font: inherit; font-weight: 500;
+.btn { display: inline-block; text-decoration: none; text-align: center; border: 0; border-radius: 999px; padding: 10px 20px; font: inherit; font-weight: 500;
   cursor: pointer; background: var(--accent); color: var(--card); }
-button.btn.tonal { background: var(--accent-soft); color: var(--accent); }
-button.btn.danger { background: var(--err-soft); color: var(--err); }
-button.btn:disabled { opacity: .5; cursor: default; }
+.btn.tonal { background: var(--accent-soft); color: var(--accent); }
+.btn.danger { background: var(--err-soft); color: var(--err); }
+.btn:disabled { opacity: .5; cursor: default; }
 .msg { border-radius: 12px; padding: 10px 14px; font-size: 14px; margin-top: 12px; }
 .msg.err { background: var(--err-soft); color: var(--err); }
 .msg.ok { background: var(--ok-soft); color: var(--ok); }
@@ -77,6 +77,15 @@ dd code { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-
 pre { background: var(--field); border-radius: 12px; padding: 12px; margin: 0 0 10px; max-height: 360px;
   overflow: auto; font: 12.5px/1.45 ui-monospace, "Cascadia Mono", Consolas, monospace; white-space: pre-wrap; }
 .hidden { display: none !important; }
+.row.end { justify-content: flex-end; }
+.stepper { display: flex; list-style: none; margin: 0 0 18px; padding: 0; gap: 8px; }
+.stepper li { flex: 1; display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; font-weight: 500;
+  padding-bottom: 10px; border-bottom: 3px solid var(--line); }
+.stepper li span { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 12px;
+  background: var(--line); color: var(--muted); }
+.stepper li.on { color: var(--accent); border-color: var(--accent); }
+.stepper li.on span, .stepper li.done span { background: var(--accent); color: var(--card); }
+.stepper li.done { border-color: var(--accent); }
 .spin { display: inline-block; width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent;
   border-radius: 50%; animation: s 1s linear infinite; vertical-align: -2px; margin-right: 6px; }
 @keyframes s { to { transform: rotate(360deg); } }
@@ -98,31 +107,62 @@ pre { background: var(--field); border-radius: 12px; padding: 12px; margin: 0 0 
 
   <section id="tab-account">
     <div class="card hidden" id="signin">
-      <h2>Sign in to Proton</h2>
-      <p>Your password goes straight to Bridge on this Home Assistant and isn't stored by this page.</p>
-      <form id="login-form">
+      <ol class="stepper" id="stepper">
+        <li data-step="1"><span>1</span>Sign in</li>
+        <li data-step="2"><span>2</span>Verify</li>
+        <li data-step="3"><span>3</span>Done</li>
+      </ol>
+
+      <form id="pane-credentials" class="pane">
+        <h2>Sign in to Proton</h2>
+        <p>Your password goes straight to Bridge on this Home Assistant and isn't stored by this page.</p>
         <label for="email">Email</label>
         <input id="email" type="email" autocomplete="username" required>
         <label for="password">Password</label>
         <input id="password" type="password" autocomplete="current-password" required>
-        <div class="row"><button class="btn" type="submit">Sign in</button></div>
-      </form>
-      <form id="step-form" class="hidden">
-        <label for="step-input" id="step-label"></label>
-        <input id="step-input" autocomplete="one-time-code" required>
-        <div class="row">
-          <button class="btn" type="submit">Continue</button>
-          <button class="btn tonal" type="button" id="cancel">Cancel</button>
+        <div class="row end">
+          <button class="btn tonal hidden" type="button" id="cred-cancel">Cancel</button>
+          <button class="btn" type="submit">Next</button>
         </div>
       </form>
-      <div id="hv" class="hidden">
-        <p>Proton wants to check you're human. Open the link, complete the check, then come back here.</p>
-        <div class="row">
-          <a class="btn" id="hv-link" target="_blank" rel="noopener" style="text-decoration:none">Open check</a>
-          <button class="btn tonal" id="hv-done">I've done it</button>
-          <button class="btn tonal" id="hv-cancel">Cancel</button>
+
+      <div id="pane-hv" class="pane hidden">
+        <h2>Confirm you're human</h2>
+        <p>Proton wants a quick check before it lets Bridge sign in. It opens in a new tab; come back here when you've finished it.</p>
+        <div class="row"><a class="btn" id="hv-link" target="_blank" rel="noopener">Open Proton's check</a></div>
+        <div class="row end">
+          <button class="btn tonal" type="button" data-cancel>Cancel</button>
+          <button class="btn" type="button" id="hv-done" disabled title="Open the check first">I've finished the check</button>
         </div>
       </div>
+
+      <form id="pane-code" class="pane hidden">
+        <h2>Two-factor code</h2>
+        <p>Enter the 6-digit code from your authenticator app.</p>
+        <input id="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required
+               style="font-size:22px;letter-spacing:8px;text-align:center;max-width:220px">
+        <div class="row end">
+          <button class="btn tonal" type="button" data-cancel>Cancel</button>
+          <button class="btn" type="submit">Verify</button>
+        </div>
+      </form>
+
+      <form id="pane-mailbox" class="pane hidden">
+        <h2>Mailbox password</h2>
+        <p>Your account uses a separate mailbox password to unlock your mail.</p>
+        <input id="mailbox" type="password" autocomplete="current-password" required>
+        <div class="row end">
+          <button class="btn tonal" type="button" data-cancel>Cancel</button>
+          <button class="btn" type="submit">Unlock</button>
+        </div>
+      </form>
+
+      <div id="pane-done" class="pane hidden">
+        <h2>You're signed in</h2>
+        <p>Bridge is now downloading your mail. The first time this can take a while; progress shows at the top.</p>
+        <div class="row end"><button class="btn" type="button" id="done-ok">Show account</button></div>
+      </div>
+
       <div id="login-msg"></div>
     </div>
 
@@ -201,7 +241,8 @@ async function refresh() {
   else if (connected.length) { chip.textContent = "Connected"; chip.className = "chip ok"; }
   else { chip.textContent = "Signed out"; chip.className = "chip warn"; }
 
-  const showSignin = !state.accounts.length || addingAccount || state.login_state !== "idle";
+  resumeWizard();
+  const showSignin = !state.accounts.length || addingAccount || state.login_state !== "idle" || pane === "done";
   $("signin").classList.toggle("hidden", !showSignin);
   $("accounts-card").classList.toggle("hidden", !state.accounts.length);
   $("imap-card").classList.toggle("hidden", !connected.length);
@@ -249,7 +290,7 @@ document.addEventListener("click", async (e) => {
   const b = e.target.closest("[data-act]");
   if (!b) return;
   const act = b.dataset.act, index = +b.dataset.i;
-  if (act === "login") { addingAccount = true; $("email").value = b.dataset.name; refresh(); return; }
+  if (act === "login") { addingAccount = true; $("email").value = b.dataset.name; showPane("credentials"); refresh(); return; }
   if ((act === "delete" || act === "logout") && b.dataset.sure !== "1") {
     b.dataset.sure = "1"; b.textContent = "Sure?"; setTimeout(() => { b.dataset.sure = ""; refresh(); }, 4000); return;
   }
@@ -259,50 +300,63 @@ document.addEventListener("click", async (e) => {
   imapShownFor = null;
   refresh();
 });
-const alertCard = (text) => { msg("login-msg", "err", esc(text)); $("signin").classList.remove("hidden"); };
+const alertCard = (text) => { $("accounts").insertAdjacentHTML("afterend", `<div class="msg err">${esc(text)}</div>`); };
 
-$("add-account").onclick = () => { addingAccount = true; $("email").value = ""; refresh(); $("email").focus(); };
+$("add-account").onclick = () => { addingAccount = true; $("email").value = ""; showPane("credentials"); refresh(); };
 
-// Sign-in flow
-function showStep(r) {
-  $("login-form").classList.toggle("hidden", ["need_2fa", "need_mailbox", "need_hv"].includes(r.state));
-  $("step-form").classList.toggle("hidden", !["need_2fa", "need_mailbox"].includes(r.state));
-  $("hv").classList.toggle("hidden", r.state !== "need_hv");
+// Sign-in wizard
+const PANES = { credentials: 1, hv: 2, code: 2, mailbox: 2, done: 3 };
+let pane = "credentials";
+function showPane(name) {
+  pane = name;
+  Object.keys(PANES).forEach((p) => $("pane-" + p).classList.toggle("hidden", p !== name));
+  document.querySelectorAll("#stepper li").forEach((li) => {
+    const n = +li.dataset.step;
+    li.classList.toggle("on", n === PANES[name]); li.classList.toggle("done", n < PANES[name]);
+  });
+  $("cred-cancel").classList.toggle("hidden", !state.accounts.length);
+  const focus = { credentials: "email", code: "code", mailbox: "mailbox" }[name];
+  if (focus) setTimeout(() => $(focus).focus(), 50);
+}
+function handle(r) {
   msg("login-msg", "", "");
-  if (r.state === "need_2fa") {
-    $("step-label").textContent = "Two-factor code from your authenticator app";
-    $("step-input").type = "text"; $("step-input").inputMode = "numeric"; $("step-input").value = ""; $("step-input").focus();
-  } else if (r.state === "need_mailbox") {
-    $("step-label").textContent = "Mailbox password";
-    $("step-input").type = "password"; $("step-input").inputMode = "text"; $("step-input").value = ""; $("step-input").focus();
-  } else if (r.state === "need_hv") {
+  const next = { need_2fa: "code", need_mailbox: "mailbox", need_hv: "hv", done: "done" }[r.state];
+  if (r.state === "need_hv") {
     $("hv-link").href = r.url || "#";
-  } else if (r.state === "done") {
-    $("password").value = ""; addingAccount = false;
-    msg("login-msg", "ok", "Signed in. Bridge is now downloading your mail; this can take a while the first time.");
-  } else if (r.state === "error") {
-    msg("login-msg", "err", esc(r.message));
+    $("hv-done").disabled = true;
+  }
+  if (next) { showPane(next); if (next === "done") { $("password").value = ""; } }
+  else {
+    showPane("credentials");
+    if (r.state === "error") msg("login-msg", "err", esc(r.message) + "<br>Please sign in again.");
   }
   refresh();
 }
-
-$("login-form").onsubmit = async (e) => {
-  e.preventDefault();
-  const btn = e.submitter; busy(btn, true, "Signing in…");
-  msg("login-msg", "", "");
-  try { showStep(await api("api/login", { email: $("email").value.trim(), password: $("password").value })); }
+async function submitStep(btn, label, path, body) {
+  busy(btn, true, label);
+  try { handle(await api(path, body)); } catch { msg("login-msg", "err", "Lost contact with Bridge. Please try again."); }
   finally { busy(btn, false); }
-};
-$("step-form").onsubmit = async (e) => {
-  e.preventDefault();
-  const btn = e.submitter; busy(btn, true, "Checking…");
-  try { showStep(await api("api/answer", { value: $("step-input").value.trim() })); }
-  finally { busy(btn, false); $("step-input").value = ""; }
-};
-$("hv-done").onclick = async () => { busy($("hv-done"), true, "Checking…");
-  try { showStep(await api("api/answer", { value: "" })); } finally { busy($("hv-done"), false); } };
-const cancel = async () => { await api("api/cancel", {}); addingAccount = false; showStep({ state: "idle" }); };
-$("cancel").onclick = cancel; $("hv-cancel").onclick = cancel;
+}
+$("pane-credentials").onsubmit = (e) => { e.preventDefault();
+  submitStep(e.submitter, "Signing in…", "api/login", { email: $("email").value.trim(), password: $("password").value }); };
+$("pane-code").onsubmit = (e) => { e.preventDefault();
+  const v = $("code").value.trim(); $("code").value = ""; submitStep(e.submitter, "Checking…", "api/answer", { value: v }); };
+$("pane-mailbox").onsubmit = (e) => { e.preventDefault();
+  const v = $("mailbox").value; $("mailbox").value = ""; submitStep(e.submitter, "Unlocking…", "api/answer", { value: v }); };
+$("hv-link").onclick = () => { $("hv-done").disabled = false; $("hv-done").title = ""; };
+$("hv-done").onclick = () => submitStep($("hv-done"), "Checking…", "api/answer", { value: "" });
+document.querySelectorAll("[data-cancel]").forEach((b) => b.onclick = async () => {
+  await api("api/cancel", {}); addingAccount = false; showPane("credentials"); refresh(); });
+$("cred-cancel").onclick = () => { addingAccount = false; refresh(); };
+$("done-ok").onclick = () => { addingAccount = false; showPane("credentials"); refresh(); };
+let resumed = false;
+function resumeWizard() {
+  if (resumed) return; resumed = true;
+  if (state.login_state === "need_hv") handle({ state: "need_hv", url: state.hv_url });
+  else if (state.login_state === "need_2fa") showPane("code");
+  else if (state.login_state === "need_mailbox") showPane("mailbox");
+  else showPane("credentials");
+}
 
 // Settings
 const HELP = {
@@ -345,7 +399,7 @@ $("console-form").onsubmit = async (e) => {
 };
 
 refresh();
-setInterval(() => { if (state.login_state === "idle" && $("step-form").classList.contains("hidden")) refresh(); }, 10000);
+setInterval(() => { if (state.login_state === "idle" && pane === "credentials") refresh(); }, 10000);
 </script>
 </body>
 </html>

@@ -39,6 +39,8 @@ LOGIN_PATTERNS = {
 class Bridge:
     def __init__(self):
         self.lock = threading.RLock()
+        self.proc_lock = threading.Lock()
+        self.settings_cache = None
         self.buf = ""
         self.fd = None
         self.pid = None
@@ -58,27 +60,49 @@ class Bridge:
         self.pid, self.fd = pid, fd
         self.login_state, self.hv_url = "idle", None
 
-    def restart(self):
-        with self.lock:
+    def _stop(self):
+        """Stop the current Bridge and wait until it's really gone (it holds a lock file)."""
+        pid = self.pid
+        for sig, wait in ((signal.SIGTERM, 20), (signal.SIGKILL, 5)):
             try:
-                os.kill(self.pid, signal.SIGTERM)
+                os.kill(pid, sig)
             except ProcessLookupError:
                 pass
-            time.sleep(3)
+            end = time.time() + wait
+            while time.time() < end:
+                try:
+                    done, _ = os.waitpid(pid, os.WNOHANG)
+                except ChildProcessError:
+                    return
+                if done:
+                    return
+                time.sleep(0.2)
+
+    def restart(self):
+        with self.proc_lock:
+            self._stop()
+            try:
+                os.close(self.fd)
+            except OSError:
+                pass
             self.buf = ""
             self.start()
 
     def _watch(self):
         while True:
             time.sleep(2)
-            try:
-                done, _ = os.waitpid(self.pid, os.WNOHANG)
-            except ChildProcessError:
-                done = self.pid
-            if done:
-                print("Bridge exited, restarting in 5 seconds", flush=True)
-                time.sleep(5)
-                with self.lock:
+            with self.proc_lock:
+                try:
+                    done, _ = os.waitpid(self.pid, os.WNOHANG)
+                except ChildProcessError:
+                    done = self.pid
+                if done:
+                    print("Bridge exited, restarting in 5 seconds", flush=True)
+                    time.sleep(5)
+                    try:
+                        os.close(self.fd)
+                    except OSError:
+                        pass
                     self.buf = ""
                     self.start()
 
@@ -162,7 +186,9 @@ class Bridge:
             self.login_state = key
             return {"state": key}
         if key == "need_hv":
-            url = re.search(r"https://\S+", seg)
+            time.sleep(1)  # the URL is printed just after the notice
+            hv_text = self.buf[self.buf.rfind(LOGIN_PATTERNS["need_hv"]):]
+            url = re.search(r"https://verify\.proton\.me/\S+", hv_text) or re.search(r"https://\S+", hv_text)
             self.hv_url = url.group(0) if url else None
             self.login_state = "need_hv"
             return {"state": "need_hv", "url": self.hv_url}
@@ -229,16 +255,33 @@ class Bridge:
                 _, seg = self.wait_for({"p": "\n>>> ", "p2": "\n >>> "}, mark, timeout)
             return key == "q", seg
 
-    def settings(self):
-        values = {}
-        for key, (on_cmd, _off, _label) in SETTINGS.items():
-            asked, _ = self.confirm(on_cmd, "no")
-            values[key] = not asked  # "already ..." means it's on
+    def settings(self, fresh=False):
+        if self.settings_cache and not fresh:
+            return self.settings_cache
+        if self.login_state != "idle":
+            raise RuntimeError("Finish or cancel the sign-in first.")
+        if not self.lock.acquire(timeout=3):
+            raise RuntimeError("Bridge is busy right now. Try again in a moment.")
+        try:
+            values = {}
+            for key, (on_cmd, _off, _label) in SETTINGS.items():
+                asked, _ = self.confirm(on_cmd, "no", timeout=10)
+                values[key] = not asked  # "already ..." means it's on
+            self.settings_cache = values
+        finally:
+            self.lock.release()
         return values
 
     def set_setting(self, key, on):
         on_cmd, off_cmd, _ = SETTINGS[key]
-        self.confirm(on_cmd if on else off_cmd, "yes")
+        if not self.lock.acquire(timeout=3):
+            raise RuntimeError("Bridge is busy right now. Try again in a moment.")
+        try:
+            self.confirm(on_cmd if on else off_cmd, "yes")
+        finally:
+            self.lock.release()
+        if self.settings_cache:
+            self.settings_cache[key] = on
         return {"ok": True}
 
     def account_action(self, action, index):
@@ -254,10 +297,13 @@ class Bridge:
         return {"ok": True}
 
     def version(self):
+        if getattr(self, "_version", None):
+            return self._version
         with self.lock:
             out = self.command("version")
         m = re.search(r"Proton Mail Bridge (\S+)", out)
-        return m.group(1) if m else ""
+        self._version = m.group(1) if m else ""
+        return self._version
 
     def console(self, line):
         """Send one line as typed and return what Bridge printed (max ~10 s)."""
