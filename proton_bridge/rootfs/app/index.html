@@ -55,6 +55,16 @@ input:focus { outline: 2px solid var(--accent); border-color: transparent; }
 .seg button { border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 13px; font-weight: 500;
   padding: 6px 14px; border-radius: 999px; cursor: pointer; white-space: nowrap; }
 .seg button.on { background: var(--accent); color: var(--card); cursor: default; }
+.seg button:disabled { cursor: default; }
+.seg.loading { background: linear-gradient(90deg, var(--line), var(--accent-soft), var(--line)); background-size: 200% 100%;
+  animation: shimmer 1.2s linear infinite; }
+.seg.loading button { color: transparent; background: transparent; }
+dialog { border: 0; border-radius: 28px; padding: 24px; width: min(400px, calc(100vw - 32px));
+  background: var(--card); color: var(--text); box-shadow: 0 8px 32px rgba(0, 0, 0, .25); }
+dialog::backdrop { background: rgba(0, 0, 0, .4); }
+dialog h2 { font-size: 20px; font-weight: 500; margin: 0 0 12px; }
+dialog p { margin: 0; color: var(--muted); font-size: 14px; }
+dialog .row { justify-content: flex-end; margin-top: 24px; }
 .msg.err { background: var(--err-soft); color: var(--err); }
 .msg.ok { background: var(--ok-soft); color: var(--ok); }
 .msg.info { background: var(--accent-soft); color: var(--accent); }
@@ -231,11 +241,9 @@ pre { background: var(--field); border-radius: 12px; padding: 12px; margin: 0 0 
     <div id="settings-msg"></div>
     <div class="card">
       <h2>Maintenance</h2>
-      <p><b>Repair</b> reloads all accounts and cached data and downloads all mail again. Messages may disappear for a while
-         and come back as they download; Home Assistant stays connected.<br>
+      <p><b>Repair</b> reloads all accounts, cached data, and downloads all emails again.<br>
          <b>Restart</b> only restarts Bridge.<br>
-         <b>Reset</b> removes all accounts, clears cached data and restores the original settings. You'll need to sign in
-         again and enter the new password in Home Assistant.</p>
+         <b>Reset</b> removes all accounts, clears cached data, and restores the original settings.</p>
       <div class="row">
         <button class="btn tonal" id="repair">Repair</button>
         <button class="btn tonal" id="restart">Restart Bridge</button>
@@ -259,6 +267,15 @@ pre { background: var(--field); border-radius: 12px; padding: 12px; margin: 0 0 
   </section>
 </main>
 
+<dialog id="dlg" aria-labelledby="dlg-title">
+  <h2 id="dlg-title"></h2>
+  <p id="dlg-text"></p>
+  <div class="row">
+    <button class="btn tonal" type="button" id="dlg-cancel">Cancel</button>
+    <button class="btn" type="button" id="dlg-ok"></button>
+  </div>
+</dialog>
+
 <script>
 const $ = (id) => document.getElementById(id);
 const api = async (path, body) => {
@@ -271,6 +288,15 @@ const api = async (path, body) => {
 const mask = (v, full) => { v = String(v); const at = full ? -1 : v.indexOf("@");
   return at < 0 ? "•".repeat(v.length) : "•".repeat(at) + v.slice(at); };
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+// Confirmation dialog (Proton's wording, adapted to Home Assistant). Resolves true on confirm.
+const confirmDlg = (title, text, ok, danger) => new Promise((resolve) => {
+  const d = $("dlg"); $("dlg-title").textContent = title; $("dlg-text").textContent = text;
+  $("dlg-ok").textContent = ok; $("dlg-ok").className = danger ? "btn danger" : "btn";
+  const done = (v) => { d.onclose = null; if (d.open) d.close(); resolve(v); };
+  $("dlg-ok").onclick = () => done(true); $("dlg-cancel").onclick = () => done(false);
+  d.onclose = () => done(false);
+  d.showModal(); $("dlg-cancel").focus();
+});
 const msg = (el, kind, text) => { $(el).innerHTML = text ? `<div class="msg ${kind}">${text}</div>` : ""; };
 const busy = (btn, on, label) => { btn.disabled = on; if (on) { btn.dataset.l = btn.innerHTML; btn.innerHTML = `<span class="spin"></span>${label}`; } else if (btn.dataset.l) btn.innerHTML = btn.dataset.l; };
 
@@ -403,15 +429,18 @@ document.addEventListener("click", async (e) => {
   const act = b.dataset.act, index = +b.dataset.i;
   if (act === "mode") {
     if (b.classList.contains("on")) return;
-    if (b.dataset.sure !== "1") {
-      b.dataset.sure = "1"; b.textContent = "Switch? Redo IMAP setup";
-      setTimeout(() => { b.dataset.sure = ""; refresh(); }, 5000); return;
-    }
+    const split = b.dataset.to === "split";
+    if (!await confirmDlg(split ? "Enable split mode?" : "Enable combined mode?",
+      "Changing between split and combined address mode will require you to remove the IMAP integration from Home Assistant " +
+      "and set it up again from scratch. Bridge will also synchronize all mail again.",
+      split ? "Enable split mode" : "Enable combined mode")) return;
   }
   if (act === "login") { addingAccount = true; $("email").value = b.dataset.name; showPane("credentials"); refresh(); return; }
-  if ((act === "delete" || act === "logout") && b.dataset.sure !== "1") {
-    b.dataset.sure = "1"; b.textContent = "Sure?"; setTimeout(() => { b.dataset.sure = ""; refresh(); }, 4000); return;
-  }
+  if (act === "logout" && !await confirmDlg("Sign out?",
+    "Home Assistant stops receiving mail from this account until you sign in again.", "Sign out")) return;
+  if (act === "delete" && !await confirmDlg("Remove account?",
+    "Bridge forgets this account and its cached mail. To use it again, sign in again and set up Home Assistant's " +
+    "IMAP integration with the new password.", "Remove account", true)) return;
   busy(b, true, "");
   msg("accounts-msg", "", "");
   const r = await api("api/account", { action: act, index });
@@ -480,8 +509,8 @@ function resumeWizard() {
 // Settings
 const SETTING_UI = [
   { key: "all_mail", group: "mail", label: "Show All Mail", help: "Lists the All Mail folder in the mailbox Home Assistant sees." },
-  { key: "imap_ssl", group: "mail", label: "IMAP connection: SSL", help: "Home Assistant's IMAP integration needs this on. Off means STARTTLS, which it doesn't support." },
-  { key: "smtp_ssl", group: "mail", label: "SMTP connection: SSL", help: "For Home Assistant's SMTP integration (sending mail). Off means STARTTLS, which that integration also supports." },
+  { key: "imap_ssl", group: "mail", label: "IMAP connection", seg: true, help: "Home Assistant's IMAP integration needs SSL; it can't use STARTTLS." },
+  { key: "smtp_ssl", group: "mail", label: "SMTP connection", seg: true, help: "For Home Assistant's SMTP integration (sending mail), which works with either." },
   { key: "proxy", group: "net", label: "Alternative routing", help: "If Proton's servers are blocked where you are, Bridge reaches Proton through alternative network routes instead." },
   { key: "telemetry", group: "net", label: "Collect usage diagnostics", help: "Helps Proton improve its services by sending anonymous usage statistics." },
 ];
@@ -489,7 +518,25 @@ const SETTING_UI = [
 SETTING_UI.forEach((d) => {
   document.querySelector(`[data-group="${d.group}"]`).insertAdjacentHTML("beforeend", `
     <div class="toggle"><div>${esc(d.label)}<small>${esc(d.help)}</small></div>
-      <label class="switch loading"><input type="checkbox" data-key="${d.key}" disabled><span></span></label></div>`);
+      ${d.seg
+        ? `<div class="seg loading" role="group" aria-label="${esc(d.label)}" data-seg="${d.key}">
+             <button type="button" data-on="1" disabled>SSL</button><button type="button" data-on="0" disabled>STARTTLS</button></div>`
+        : `<label class="switch loading"><input type="checkbox" data-key="${d.key}" disabled><span></span></label>`}</div>`);
+});
+const segSet = (g, on, loading) => { g.classList.toggle("loading", !!loading);
+  g.querySelectorAll("button").forEach((b) => { const me = (b.dataset.on === "1") === !!on;
+    b.classList.toggle("on", !loading && on !== null && on !== undefined && me);
+    b.disabled = !!loading || on === null || on === undefined || me; }); };
+document.querySelectorAll("[data-seg]").forEach((g) => g.onclick = async (e) => {
+  const b = e.target.closest("button"); if (!b || b.disabled) return;
+  const key = g.dataset.seg, on = b.dataset.on === "1";
+  if (key === "imap_ssl" && !on && !await confirmDlg("Switch IMAP to STARTTLS?",
+    "Home Assistant's IMAP integration only connects over SSL, so it will stop receiving mail until you switch back.",
+    "Switch to STARTTLS", true)) return;
+  segSet(g, !on, true);
+  const r = await api("api/settings", { key, on });
+  if (r.state === "error") { segSet(g, !on); msg("settings-msg", "err", esc(r.message)); } else segSet(g, on);
+  if (key === "imap_ssl") { imapShownFor = null; refresh(); }
 });
 document.querySelectorAll("input[data-key]").forEach((i) => i.onchange = async () => {
   i.disabled = true; i.parentElement.classList.add("loading");
@@ -501,6 +548,7 @@ document.querySelectorAll("input[data-key]").forEach((i) => i.onchange = async (
 async function loadSettings() {
   msg("settings-msg", "", "");
   document.querySelectorAll("input[data-key]").forEach((i) => { i.disabled = true; i.parentElement.classList.add("loading"); });
+  document.querySelectorAll("[data-seg]").forEach((g) => segSet(g, null, true));
   const r = await api("api/settings", {});
   if (r.state === "error") { msg("settings-msg", "err", esc(r.message)); return; }
   $("version").textContent = "Bridge " + r.version;
@@ -508,27 +556,37 @@ async function loadSettings() {
     const v = r.values[i.dataset.key];
     i.parentElement.classList.remove("loading");
     i.checked = !!v;
-    i.disabled = v === null || v === undefined;  // e.g. SSL switches before an account exists
+    i.disabled = v === null || v === undefined;
   });
+  // SSL / STARTTLS: unset before an account exists, then neither side is selectable.
+  document.querySelectorAll("[data-seg]").forEach((g) => segSet(g, r.values[g.dataset.seg]));
 }
 $("check-updates").onclick = async () => { const b = $("check-updates"); busy(b, true, "Checking…");
   const r = await api("api/check-updates", {}); busy(b, false); msg("updates-msg", "info", esc(r.message || r.message)); };
 $("reset").onclick = async () => {
   const b = $("reset");
-  if (b.dataset.sure !== "1") { b.dataset.sure = "1"; b.textContent = "Reset? Removes all accounts";
-    setTimeout(() => { b.dataset.sure = ""; b.textContent = "Reset Bridge"; }, 5000); return; }
-  b.dataset.sure = ""; busy(b, true, "Resetting…");
+  if (!await confirmDlg("Reset Bridge?",
+    "This will clear your accounts, preferences, and cached data. You will need to sign in again and set up " +
+    "Home Assistant's IMAP integration with the new password. Bridge will automatically restart.",
+    "Reset and restart", true)) return;
+  busy(b, true, "Resetting…");
   await api("api/factory-reset", {}); busy(b, false); b.textContent = "Reset Bridge";
   msg("maint-msg", "ok", "Bridge was reset."); imapShownFor = null; refresh();
 };
 $("repair").onclick = async () => {
   const b = $("repair");
-  if (b.dataset.sure !== "1") { b.dataset.sure = "1"; b.textContent = "Repair? Mail downloads again"; return; }
-  b.dataset.sure = ""; busy(b, true, "Starting…");
+  if (!await confirmDlg("Repair Bridge?",
+    "This action will reload all accounts, cached data, and re-download emails. Messages may temporarily disappear " +
+    "but will reappear progressively. Home Assistant stays connected to Bridge.", "Repair")) return;
+  busy(b, true, "Starting…");
   const r = await api("api/repair", {}); busy(b, false); b.textContent = "Repair";
   msg("maint-msg", r.ok ? "ok" : "err", r.ok ? "Repair started." : esc(r.message));
 };
-$("restart").onclick = async () => { const b = $("restart"); busy(b, true, "Restarting…");
+$("restart").onclick = async () => { const b = $("restart");
+  if (!await confirmDlg("Restart Bridge?",
+    "Bridge stops for a few seconds. Home Assistant reconnects by itself; your accounts and settings stay as they are.",
+    "Restart")) return;
+  busy(b, true, "Restarting…");
   await api("api/restart", {}); busy(b, false); msg("maint-msg", "ok", "Bridge restarted."); imapShownFor = null; setTimeout(refresh, 4000); };
 
 // Console: a live view of Bridge's terminal.

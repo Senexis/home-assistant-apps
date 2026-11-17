@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.27.2-24
+
+- IMAP and SMTP connection are SSL / STARTTLS choices, styled like the split/combined choice. Switching IMAP to STARTTLS asks first, because Home Assistant can't use it.
+- Repair, Restart, Reset, Sign out, Remove and split/combined switching ask in a dialog with Proton's wording.
+
 ## 3.27.2-23
 
 - Switching between split and combined addresses now says, like Proton's app, that the IMAP integration has to be set up again from scratch.
