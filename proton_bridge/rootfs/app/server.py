@@ -480,16 +480,9 @@ class Bridge:
         return "\n".join(out)
 
     def _mask(self, text):
-        """Hide secrets in anything Bridge prints: the part of an address before @, account
-        names and Bridge passwords become dots of the same length."""
-        dots = lambda m: "\u2022" * len(m.group(0))
-        text = re.sub(r"(Password:\s+)(\S+)", lambda m: m.group(1) + "\u2022" * len(m.group(2)), text)
-        text = re.sub(r"[A-Za-z0-9._%+-]+(?=@[A-Za-z0-9.-]+\.[A-Za-z]{2,})", dots, text)
-        for acc in self.cache.get("accounts") or []:
-            name = acc["name"].split("@")[0]
-            if len(name) >= 3:
-                text = re.sub(re.escape(name), dots, text)
-        return text
+        """Hide Bridge passwords in anything Bridge prints: they become dots of the same length.
+        Account names and addresses are shown as they are."""
+        return re.sub(r"(Password:\s+)(\S+)", lambda m: m.group(1) + "\u2022" * len(m.group(2)), text)
 
     def check_updates(self):
         with self.lock:

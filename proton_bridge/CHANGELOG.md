@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.27.2-33
+
+- Account names and addresses are always shown, on the page and in the Console. The Bridge password stays hidden until you press Show.
+
 ## 3.27.2-32
 
 - The last minute of a sync shows "Less than a minute left" instead of seconds.

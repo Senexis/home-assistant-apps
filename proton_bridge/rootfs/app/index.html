@@ -443,7 +443,7 @@ function detailsHtml(a) {
   return row("Hostname", esc(info.host), { copy: info.host }) +
     row("IMAP", `Port ${info.port} · ${esc(info.security || "unknown")}`, { copy: String(info.port), plain: true }) +
     row("SMTP", `Port ${info.smtp_port} · ${esc(info.smtp_security || "unknown")}`, { copy: String(info.smtp_port), plain: true }) +
-    row("Username", shown(addr.username), { copy: addr.username, secret: addr.username }) +
+    row("Username", esc(addr.username), { copy: addr.username }) +
     row("Password", shown(addr.password, true), { copy: addr.password, secret: addr.password });
 }
 
@@ -452,7 +452,7 @@ function addrPicker(a) {
   if (a.mode !== "split" || !info || !info.addresses || info.addresses.length < 2) return "";
   const cur = Math.min(pickedAddr[a.index] || 0, info.addresses.length - 1);
   return `<div class="seg" role="group" aria-label="Address">${info.addresses.map((x, i) =>
-    `<button data-addr="${a.index}" data-n="${i}" class="${i === cur ? "on" : ""}">${shown(x.username)}</button>`).join("")}</div>`;
+    `<button data-addr="${a.index}" data-n="${i}" class="${i === cur ? "on" : ""}">${esc(x.username)}</button>`).join("")}</div>`;
 }
 
 function accountHtml(a, solo) {
@@ -466,7 +466,7 @@ function accountHtml(a, solo) {
   const title = info && !info.error && info.username && info.username.includes("@") ? info.username : a.name;
   const initial = esc((title || "?").charAt(0).toUpperCase());
   const head = `<div class="avatar" aria-hidden="true">${initial}</div>
-    <div class="who"><div class="addr">${shown(title)}</div><div class="status">${status}</div></div>`;
+    <div class="who"><div class="addr">${esc(title)}</div><div class="status">${status}</div></div>`;
   const body = a.state === "connected" ? `
     <div class="line"><div>Split addresses<small>${MODE_HELP[a.mode] || ""}</small></div>
       <div class="seg" role="group" aria-label="Address mode">
