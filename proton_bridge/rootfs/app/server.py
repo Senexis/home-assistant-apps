@@ -223,10 +223,10 @@ class Bridge:
             mark = len(self.buf)
             self.send(cmd)
             # Skip the echoed command line before looking for the prompt.
-            key, seg = self.wait_for({"q": "yes/no: ", "p": "\n>>> "}, mark, timeout)
+            key, seg = self.wait_for({"q": "yes/no: ", "p": "\n>>> ", "p2": "\n >>> "}, mark, timeout)
             if key == "q":
                 self.send(answer)
-                _, seg = self.wait_for({"p": "\n>>> "}, mark, timeout)
+                _, seg = self.wait_for({"p": "\n>>> ", "p2": "\n >>> "}, mark, timeout)
             return key == "q", seg
 
     def settings(self):
@@ -266,7 +266,7 @@ class Bridge:
                 raise RuntimeError("Finish or cancel the sign-in first.")
             mark = len(self.buf)
             self.send(line)
-            _, seg = self.wait_for({"q": "yes/no: ", "p": "\n>>> ", "c": ": "}, mark, 10)
+            _, seg = self.wait_for({"q": "yes/no: ", "p": "\n>>> ", "p2": "\n >>> ", "c": ": "}, mark, 10)
             time.sleep(0.3)
             seg = self.buf[mark:]
             first_nl = seg.find("\n")
