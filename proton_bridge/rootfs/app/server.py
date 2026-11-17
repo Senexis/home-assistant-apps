@@ -163,12 +163,26 @@ class Bridge:
         if "No active accounts" not in out and "address mode" not in out and not re.search(r"^\s*\d+\s*:", out, re.M):
             return self.cache["accounts"] if self.ready else None
         self.ready = True
+        self._apply_defaults()
         accounts = []
         for m in re.finditer(r"^\s*(\d+)\s*:\s*(\S+)\s+\(\s*([^,]+?)\s*,\s*([^)]+?)\s*\)", out, re.M):
             accounts.append({"index": int(m.group(1)), "name": m.group(2),
                              "state": m.group(3), "mode": m.group(4)})
         self.cache = {"accounts": accounts, "time": time.time()}
         return accounts
+
+    def _apply_defaults(self):
+        """First start only: Bridge can't install updates in this app, so don't let it download them."""
+        flag = Path(os.environ.get("HOME", "/data/home")) / ".ui-defaults-applied"
+        if flag.exists():
+            return
+        try:
+            with self.lock:
+                self.confirm("updates autoupdates disable", "yes")
+            flag.touch()
+            self.settings_cache = None
+        except Exception as err:  # retried on the next start
+            print("Could not apply defaults:", err, flush=True)
 
     def sync(self):
         lines = [l.lstrip("> ") for l in self.buf.splitlines()]
@@ -365,6 +379,37 @@ class Bridge:
             self.console_waiting = not out.rstrip().endswith(">>>")
             return out
 
+    def send_raw(self, line):
+        """Type one line into Bridge exactly as given (Console tab)."""
+        if self.login_state != "idle":
+            raise RuntimeError("Finish or cancel the sign-in first.")
+        if not self.lock.acquire(timeout=5):
+            raise RuntimeError("Bridge is busy right now. Try again in a moment.")
+        try:
+            mark = len(self.buf)
+            self.send(line)
+            self.wait_for({"q": "yes/no: ", "p": "\n>>> ", "p2": "\n >>> ", "c": ": "}, mark, 3)
+            tail = self.buf[-200:].rstrip(" ")
+            # Bridge is waiting for an answer: keep the page's own commands out of the way.
+            self.console_waiting = not tail.endswith(">>>")
+        finally:
+            self.lock.release()
+        return {"ok": True}
+
+    def transcript(self):
+        """Bridge's output with the line editor's redraws collapsed, as a terminal would show it."""
+        out = []
+        for line in self.buf[-120_000:].split("\n"):
+            for token in (">>> ", "yes/no: "):
+                first = line.find(token)
+                if first >= 0:
+                    prefix = line[:first + len(token)]
+                    last = line.rfind(prefix)
+                    line = line[last:]
+                    break
+            out.append(line)
+        return "\n".join(out)
+
     def check_updates(self):
         with self.lock:
             mark = len(self.buf)
@@ -400,8 +445,6 @@ SETTINGS = {
     "all_mail": ("all-mail-visibility show", "all-mail-visibility hide", "Show the All Mail folder"),
     "proxy": ("proxy allow", "proxy disallow", "Alternative routing"),
     "telemetry": ("telemetry enable", "telemetry disable", "Usage diagnostics"),
-    "autoupdates": ("updates autoupdates enable", "updates autoupdates disable", "Automatic updates"),
-    "early": ("updates channel early", "updates channel stable", "Early-access updates"),
 }
 
 
@@ -445,7 +488,7 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(INDEX)
         elif path == "/api/screen":
-            self._json({"text": bridge.buf[-6000:]})
+            self._json({"text": bridge.transcript()})
         elif path == "/api/status":
             self._json({"accounts": bridge.accounts(), "sync": bridge.sync(),
                         "login_state": bridge.login_state, "hv_url": bridge.hv_url})
@@ -489,7 +532,7 @@ class Handler(BaseHTTPRequestHandler):
                 bridge.restart()
                 self._json({"ok": True})
             elif path == "/api/console":
-                self._json({"output": bridge.console(clean(data.get("line"), 512))})
+                self._json(bridge.send_raw(clean(data.get("line"), 512)))
             else:
                 self.send_error(404)
         except (ValueError, KeyError):

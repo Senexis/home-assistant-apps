@@ -91,6 +91,7 @@ dd code { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-
 @keyframes shimmer { to { background-position: -200% 0; } }
 .bar { height: 6px; border-radius: 6px; background: var(--line); overflow: hidden; margin-top: 8px; }
 .bar div { height: 100%; background: var(--accent); }
+pre.term { height: 420px; max-height: none; background: #0f1416; color: #d6e2e5; }
 pre { background: var(--field); border-radius: 12px; padding: 12px; margin: 0 0 10px; max-height: 360px;
   overflow: auto; font: 12.5px/1.45 ui-monospace, "Cascadia Mono", Consolas, monospace; white-space: pre-wrap; }
 .hidden { display: none !important; }
@@ -218,8 +219,9 @@ pre { background: var(--field); border-radius: 12px; padding: 12px; margin: 0 0 
       <div data-group="net"></div>
     </div>
     <div class="card">
-      <h2>Updates</h2>
-      <div data-group="updates"></div>
+      <h2>Bridge version</h2>
+      <p>Bridge is updated together with this app, so Bridge's own update settings are switched off.
+         Check whether Proton has a newer version than the one this app ships.</p>
       <div class="row"><button class="btn tonal" id="check-updates">Check for a new Bridge version</button></div>
       <div id="updates-msg"></div>
     </div>
@@ -235,18 +237,13 @@ pre { background: var(--field); border-radius: 12px; padding: 12px; margin: 0 0 
       </div>
       <div id="maint-msg"></div>
     </div>
-    <div class="card">
-      <h2>Fixed by this app</h2>
-      <p>Ports, the message cache location and the TLS certificate stay as they are, because the app depends on them.
-         Use the Console if you really need to look at them.</p>
-    </div>
   </section>
 
   <section id="tab-console" class="hidden">
     <div class="card">
       <h2>Console</h2>
-      <p>Everything else Bridge can do. Type <code>help</code> for the list; answer questions with yes or no.</p>
-      <pre id="console-out"></pre>
+      <p>Bridge's own command line, including the commands this page runs for you. Type <code>help</code> for the list.</p>
+      <pre id="console-out" class="term"></pre>
       <form id="console-form" style="display:flex;gap:8px">
         <input id="console-in" placeholder="Command" autocomplete="off" spellcheck="false">
         <button class="btn" type="submit">Send</button>
@@ -276,11 +273,29 @@ const revealed = new Set();
 let imapShownFor = null;
 
 // Tabs
-document.querySelectorAll("nav button").forEach((b) => b.onclick = () => {
-  document.querySelectorAll("nav button").forEach((x) => x.classList.toggle("on", x === b));
-  ["account", "settings", "console"].forEach((t) => $("tab-" + t).classList.toggle("hidden", t !== b.dataset.tab));
-  if (b.dataset.tab === "settings") loadSettings();
-});
+// The open tab lives in the URL (#settings), also in Home Assistant's own address bar where possible,
+// so a refresh comes back to the same tab.
+const TABS = ["account", "settings", "console"];
+function readTab() {
+  for (const loc of [() => window.parent.location, () => window.location]) {
+    try { const t = loc().hash.replace("#", ""); if (TABS.includes(t)) return t; } catch {}
+  }
+  return "account";
+}
+function writeTab(t) {
+  const hash = t === "account" ? "" : "#" + t;
+  for (const w of [window, window.parent]) {
+    try { w.history.replaceState(w.history.state, "", w.location.pathname + w.location.search + hash); } catch {}
+  }
+}
+function openTab(t) {
+  document.querySelectorAll("nav button").forEach((x) => x.classList.toggle("on", x.dataset.tab === t));
+  TABS.forEach((x) => $("tab-" + x).classList.toggle("hidden", x !== t));
+  writeTab(t);
+  if (t === "settings") loadSettings();
+  consoleActive(t === "console");
+}
+document.querySelectorAll("nav button").forEach((b) => b.onclick = () => openTab(b.dataset.tab));
 
 // Status
 async function refresh() {
@@ -456,8 +471,6 @@ const SETTING_UI = [
   { key: "smtp_ssl", group: "mail", label: "SMTP over SSL", help: "Only matters for sending mail, which this app doesn't offer to Home Assistant. Off means STARTTLS." },
   { key: "proxy", group: "net", label: "Alternative routing", help: "Lets Bridge reach Proton through a third party if Proton is blocked on your network." },
   { key: "telemetry", group: "net", label: "Usage diagnostics", help: "Sends anonymous usage statistics to Proton." },
-  { key: "autoupdates", group: "updates", label: "Automatic updates", help: "Bridge can't install updates inside this app; the app is updated instead. Best left off." },
-  { key: "early", group: "updates", label: "Early-access updates", help: "Which release channel Bridge checks. Switching back to stable can reset Bridge's data." },
 ];
 // Draw every switch straight away, greyed out until Bridge has answered.
 SETTING_UI.forEach((d) => {
@@ -505,18 +518,31 @@ $("repair").onclick = async () => {
 $("restart").onclick = async () => { const b = $("restart"); busy(b, true, "Restarting…");
   await api("api/restart", {}); busy(b, false); msg("maint-msg", "ok", "Bridge restarted."); imapShownFor = null; setTimeout(refresh, 4000); };
 
-// Console
+// Console: a live view of Bridge's terminal.
+let consoleTimer = null;
+async function pollConsole() {
+  const out = $("console-out");
+  try {
+    const r = await api("api/screen");
+    const atBottom = out.scrollHeight - out.scrollTop - out.clientHeight < 40;
+    if (out.textContent !== r.text) { out.textContent = r.text; if (atBottom) out.scrollTop = out.scrollHeight; }
+  } catch { /* app restarting */ }
+}
+function consoleActive(on) {
+  clearInterval(consoleTimer); consoleTimer = null;
+  if (on) { pollConsole().then(() => { $("console-out").scrollTop = $("console-out").scrollHeight; });
+    consoleTimer = setInterval(pollConsole, 1000); setTimeout(() => $("console-in").focus(), 50); }
+}
 $("console-form").onsubmit = async (e) => {
   e.preventDefault();
   const line = $("console-in").value; $("console-in").value = "";
-  const out = $("console-out");
-  out.textContent += ">>> " + line + "\n";
   const r = await api("api/console", { line });
-  out.textContent += (r.output ?? r.message ?? "") .replace(/\n?>>> $/, "") + "\n";
-  out.scrollTop = out.scrollHeight;
+  if (r.state === "error") $("console-out").textContent += "\n[" + r.message + "]\n";
+  await pollConsole(); $("console-out").scrollTop = $("console-out").scrollHeight;
 };
 
 refresh();
+openTab(readTab());
 setInterval(() => { if (state.login_state === "idle" && ["credentials", "done"].includes(pane)) refresh(); }, 5000);
 // While Bridge starts, check more often.
 setInterval(() => { if (!$("loading").classList.contains("hidden")) refresh(); }, 1500);
