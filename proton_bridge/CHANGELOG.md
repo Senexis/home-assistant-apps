@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.27.2-29
+
+- Synchronizing shows the time left again, counting down to the second.
+
 ## 3.27.2-28
 
 - Fixed: Restart, Repair, Reset and Check now had their labels pushed to the right.

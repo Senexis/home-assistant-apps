@@ -125,6 +125,8 @@ summary.acct-head:focus-visible, .lnk:focus-visible { outline: 2px solid var(--a
 .dot.sync { background: var(--accent); } .dot.off { background: var(--muted); }
 .sbar { width: 96px; height: 4px; border-radius: 4px; background: var(--line); overflow: hidden; flex: none; }
 .sbar div { height: 100%; background: var(--accent); }
+[data-eta]:empty { display: none; }
+[data-eta] { font-variant-numeric: tabular-nums; }
 .chev { width: 24px; height: 24px; fill: var(--muted); transition: transform .2s; }
 details[open] > summary .chev { transform: rotate(180deg); }
 .acct-body { display: grid; gap: 16px; padding: 0 0 18px 52px; }
@@ -361,6 +363,23 @@ function openTab(t) {
 document.querySelectorAll("nav button").forEach((b) => b.onclick = () => openTab(b.dataset.tab));
 
 // Status
+// Sync time left, ticking every second between status polls.
+let etaSeen = null, etaEnd = null;
+function etaText() {
+  if (!etaEnd) return "";
+  const s = Math.max(0, Math.round((etaEnd - Date.now()) / 1000));
+  if (!s) return "Almost done";
+  const h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, sec = s % 60, pad = (n) => String(n).padStart(2, "0");
+  return (h ? `${h}h ${pad(m)}m ${pad(sec)}s` : m ? `${m}m ${pad(sec)}s` : `${sec}s`) + " left";
+}
+function tickEta() {
+  const t = etaText();
+  document.querySelectorAll("[data-eta]").forEach((e) => {
+    const v = t && e.dataset.eta === "sep" ? ", " + t.charAt(0).toLowerCase() + t.slice(1) : t;
+    if (e.textContent !== v) e.textContent = v; });
+}
+setInterval(tickEta, 1000);
+
 async function refresh() {
   let next;
   try { next = await api("api/status"); } catch { next = null; }
@@ -385,9 +404,12 @@ async function refresh() {
   else { chip.textContent = "Signed out"; chip.className = "chip warn"; }
 
   resumeWizard();
-  const eta = sync && sync.eta ? (sync.eta > 90 ? `about ${Math.round(sync.eta / 60)} min left` : "less than 2 min left") : "";
+  // Bridge's ETA counts down from the moment we first see it; a new estimate restarts the countdown.
+  if (sync && !sync.done && sync.eta != null) {
+    if (sync.eta !== etaSeen) { etaSeen = sync.eta; etaEnd = Date.now() + sync.eta * 1000; }
+  } else { etaSeen = null; etaEnd = null; }
   $("done-sync").innerHTML = sync && !sync.done
-    ? `<div class="sub">Synchronizing (${Math.round(sync.percent)}%)${eta ? ", " + eta : ""}</div><div class="bar"><div style="width:${sync.percent}%"></div></div>`
+    ? `<div class="sub">Synchronizing (${Math.round(sync.percent)}%)<span data-eta="sep"></span></div><div class="bar"><div style="width:${sync.percent}%"></div></div>`
     : sync && sync.done ? `<div class="msg ok">All mail synchronized.</div>` : "";
   const showSignin = !state.accounts.length || addingAccount || state.login_state !== "idle" || pane === "done";
   $("signin").classList.toggle("hidden", !showSignin);
@@ -428,7 +450,7 @@ function accountHtml(a, solo) {
   const sync = state.sync;
   const syncing = sync && !sync.done && a.state === "connected";
   const status = a.state === "connected"
-    ? (syncing ? `<span class="dot sync"></span>Synchronizing (${Math.round(sync.percent)}%)<span class="sbar"><div style="width:${sync.percent}%"></div></span>`
+    ? (syncing ? `<span class="dot sync"></span>Synchronizing (${Math.round(sync.percent)}%)<span class="sbar"><div style="width:${sync.percent}%"></div></span><span data-eta></span>`
                : `<span class="dot"></span>Connected`)
     : a.state === "locked" ? `<span class="dot sync"></span>Loading, try again shortly` : `<span class="dot off"></span>Signed out`;
   const info = mailbox[a.index];
@@ -464,6 +486,7 @@ function renderAccounts() {
   });
   const html = list.map((a) => accountHtml(a, solo)).join("");
   if (html !== lastAccountsHtml) { $("accounts").innerHTML = html; lastAccountsHtml = html; }
+  tickEta();
 }
 const forgetMailbox = () => { Object.keys(mailbox).forEach((k) => delete mailbox[k]); lastAccountsHtml = ""; };
 // Remember which accounts are unfolded across refreshes (toggle doesn't bubble, so listen while capturing).
