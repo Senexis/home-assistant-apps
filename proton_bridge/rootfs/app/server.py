@@ -23,6 +23,9 @@ IMAP_PORT = 9143
 BRIDGE = os.environ.get("UI_BRIDGE", "/usr/local/bin/bridge --cli").split()
 INDEX = Path(__file__).with_name("index.html").read_bytes()
 ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b[()][A-Za-z0-9]|\x1b[=>]")
+SGR = re.compile(r"\x1b\[[0-9;]*m")
+NON_SGR = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-ln-~]|\x1b\[[0-9;]*\?[0-9;]*m|\x1b[()][A-Za-z0-9]|\x1b[=>]")
+STATUS_LIST = "list "  # the page's own status polls; the trailing space marks them so the console can hide them
 
 LOGIN_PATTERNS = {
     "need_2fa": "Two factor code: ",
@@ -37,13 +40,28 @@ LOGIN_PATTERNS = {
 }
 
 
+def _drop_visible(raw, n):
+    """Drop the first n visible characters of raw, keeping the colour codes that are in effect."""
+    i = seen = 0
+    codes = ""
+    while i < len(raw) and seen < n:
+        m = SGR.match(raw, i)
+        if m:
+            codes += m.group(0)
+            i = m.end()
+        else:
+            i += 1
+            seen += 1
+    return codes + raw[i:]
+
+
 class Bridge:
     def __init__(self):
         self.lock = threading.RLock()
         self.proc_lock = threading.Lock()
         self.settings_cache = None
         self.console_waiting = False  # the console left Bridge waiting for an answer
-        self.buf = ""
+        self.buf = self.rawbuf = ""
         self.fd = None
         self.pid = None
         self.login_state = "idle"  # idle | need_2fa | need_mailbox | need_hv
@@ -88,7 +106,7 @@ class Bridge:
                 os.close(self.fd)
             except OSError:
                 pass
-            self.buf = ""
+            self.buf = self.rawbuf = ""
             self.start()
 
     def _watch(self):
@@ -106,7 +124,7 @@ class Bridge:
                         os.close(self.fd)
                     except OSError:
                         pass
-                    self.buf = ""
+                    self.buf = self.rawbuf = ""
                     self.start()
 
     def _reader(self):
@@ -120,8 +138,10 @@ class Bridge:
             except OSError:
                 time.sleep(1)
                 continue
-            text = ANSI.sub("", data.decode("utf-8", "replace")).replace("\r", "").replace("\b", "")
-            self.buf = (self.buf + text)[-300_000:]
+            raw = data.decode("utf-8", "replace").replace("\r", "").replace("\b", "")
+            self.buf = (self.buf + ANSI.sub("", raw))[-300_000:]
+            # Display copy for the Console: keeps colours (SGR codes) only.
+            self.rawbuf = (self.rawbuf + NON_SGR.sub("", raw))[-300_000:]
 
     # --- talking to the CLI -----------------------------------------------
     def send(self, line):
@@ -157,7 +177,7 @@ class Bridge:
         if self.login_state != "idle" or self.console_waiting or not self.lock.acquire(timeout=1):
             return self.cache["accounts"]
         try:
-            out = self.command("list")
+            out = self.command(STATUS_LIST)
         finally:
             self.lock.release()
         if "No active accounts" not in out and "address mode" not in out and not re.search(r"^\s*\d+\s*:", out, re.M):
@@ -397,17 +417,28 @@ class Bridge:
         return {"ok": True}
 
     def transcript(self):
-        """Bridge's output with the line editor's redraws collapsed, as a terminal would show it."""
-        out = []
-        for line in self.buf[-120_000:].split("\n"):
+        """Bridge's terminal as the Console shows it: colours kept, the line editor's redraws
+        collapsed, and the page's own status polls and sync progress left out."""
+        out, skipping = [], False
+        for raw in self.rawbuf[-150_000:].split("\n"):
+            plain = SGR.sub("", raw)
             for token in (">>> ", "yes/no: "):
-                first = line.find(token)
+                first = plain.find(token)
                 if first >= 0:
-                    prefix = line[:first + len(token)]
-                    last = line.rfind(prefix)
-                    line = line[last:]
+                    prefix = plain[:first + len(token)]
+                    cut = plain.rfind(prefix)
+                    raw, plain = _drop_visible(raw, cut), plain[cut:]
                     break
-            out.append(line)
+            body = plain.lstrip("> ").strip()
+            if plain.startswith(">>> "):
+                skipping = plain[4:] == STATUS_LIST  # hide this poll and its output
+            if skipping and not plain.startswith(">>> "):
+                continue
+            if skipping:
+                continue
+            if body.startswith(("Sync (", "A sync has")):
+                continue
+            out.append(raw)
         return "\n".join(out)
 
     def check_updates(self):

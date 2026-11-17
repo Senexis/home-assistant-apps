@@ -242,7 +242,8 @@ pre { background: var(--field); border-radius: 12px; padding: 12px; margin: 0 0 
   <section id="tab-console" class="hidden">
     <div class="card">
       <h2>Console</h2>
-      <p>Bridge's own command line, including the commands this page runs for you. Type <code>help</code> for the list.</p>
+      <p>Bridge's own command line, including the commands this page runs for you (except its routine status checks
+         and sync progress). Type <code>help</code> for the list.</p>
       <pre id="console-out" class="term"></pre>
       <form id="console-form" style="display:flex;gap:8px">
         <input id="console-in" placeholder="Command" autocomplete="off" spellcheck="false">
@@ -519,13 +520,33 @@ $("restart").onclick = async () => { const b = $("restart"); busy(b, true, "Rest
   await api("api/restart", {}); busy(b, false); msg("maint-msg", "ok", "Bridge restarted."); imapShownFor = null; setTimeout(refresh, 4000); };
 
 // Console: a live view of Bridge's terminal.
-let consoleTimer = null;
+let consoleTimer = null, consoleText = "";
+const ANSI_COLORS = ["#5c6b70", "#f2867e", "#81c784", "#f0c674", "#7cb7ff", "#d197f2", "#4fc3cf", "#d6e2e5"];
+function ansiToHtml(text) {
+  let html = "", bold = false, color = null, open = false;
+  for (const part of text.split(/(\x1b\[[0-9;]*m)/)) {
+    const m = part.match(/^\x1b\[([0-9;]*)m$/);
+    if (!m) { html += esc(part); continue; }
+    for (const c of (m[1] || "0").split(";").map(Number)) {
+      if (c === 0) { bold = false; color = null; }
+      else if (c === 1) bold = true;
+      else if (c === 22) bold = false;
+      else if (c === 39) color = null;
+      else if (c >= 30 && c <= 37) color = ANSI_COLORS[c - 30];
+      else if (c >= 90 && c <= 97) color = ANSI_COLORS[c - 90];
+    }
+    if (open) html += "</span>";
+    html += `<span style="${bold ? "font-weight:700;" : ""}${color ? "color:" + color : ""}">`;
+    open = true;
+  }
+  return html + (open ? "</span>" : "");
+}
 async function pollConsole() {
   const out = $("console-out");
   try {
     const r = await api("api/screen");
     const atBottom = out.scrollHeight - out.scrollTop - out.clientHeight < 40;
-    if (out.textContent !== r.text) { out.textContent = r.text; if (atBottom) out.scrollTop = out.scrollHeight; }
+    if (consoleText !== r.text) { consoleText = r.text; out.innerHTML = ansiToHtml(r.text); if (atBottom) out.scrollTop = out.scrollHeight; }
   } catch { /* app restarting */ }
 }
 function consoleActive(on) {
