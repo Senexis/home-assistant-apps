@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.27.2-27
+
+- Better support for several accounts: each account has its own row with its address mode and its own Mailbox details. With two or more accounts the rows start folded.
+- In split mode, an address picker shows each address's own login.
+- Header fits on a phone.
+
 ## 3.27.2-26
 
 - Shorter help texts and a more general Console description.

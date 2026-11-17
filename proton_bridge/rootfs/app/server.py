@@ -227,13 +227,20 @@ class Bridge:
     def imap(self, index):
         with self.lock:
             out = self.command(f"info {int(index)} ")
-        m = re.search(r"IMAP Settings.*?Username:\s*(\S+).*?Password:\s*(\S+).*?Security:\s*(\S+)", out, re.S)
-        if not m:
+        # Combined mode prints one IMAP block; split mode prints one per address.
+        found = list(re.finditer(r"IMAP Settings.*?Username:\s*(\S+).*?Password:\s*(\S+).*?Security:\s*(\S+)", out, re.S))
+        if not found:
             return None
+        m = found[0]
         smtp = re.search(r"SMTP Settings.*?Security:\s*(\S+)", out, re.S)
+        addresses, seen = [], set()
+        for f in found:
+            if f.group(1) not in seen:
+                seen.add(f.group(1))
+                addresses.append({"username": f.group(1), "password": f.group(2)})
         return {"host": socket.gethostname(), "port": IMAP_PORT, "smtp_port": SMTP_PORT,
                 "username": m.group(1), "password": m.group(2), "security": m.group(3),
-                "smtp_security": smtp.group(1) if smtp else None}
+                "smtp_security": smtp.group(1) if smtp else None, "addresses": addresses}
 
     def _login_result(self, key, seg):
         if key in ("need_2fa", "need_mailbox"):
