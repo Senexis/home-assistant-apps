@@ -353,8 +353,8 @@ async function refresh() {
     ${a.state === "connected" ? `
     <div class="mode">
       <div><div>Split addresses</div><small>${a.mode === "combined"
-        ? "Combined: mail to all your Proton addresses arrives in one mailbox with one login."
-        : "Split: each address is set up individually, with its own mailbox and login; Home Assistant uses the first."}</small></div>
+        ? "Combined: mail to all your Proton addresses arrives in one mailbox with one login. Switching means setting up Home Assistant's IMAP integration again from scratch, and Bridge synchronizes all mail again."
+        : "Split: each address is set up individually, with its own mailbox and login; Home Assistant uses the first. Switching means setting up Home Assistant's IMAP integration again from scratch, and Bridge synchronizes all mail again."}</small></div>
       <div class="seg" role="group">
         <button data-act="mode" data-i="${a.index}" data-to="combined" class="${a.mode === "combined" ? "on" : ""}">Combined</button>
         <button data-act="mode" data-i="${a.index}" data-to="split" class="${a.mode === "split" ? "on" : ""}">Split</button>
@@ -404,7 +404,7 @@ document.addEventListener("click", async (e) => {
   if (act === "mode") {
     if (b.classList.contains("on")) return;
     if (b.dataset.sure !== "1") {
-      b.dataset.sure = "1"; b.textContent = "Switch? Mail re-downloads";
+      b.dataset.sure = "1"; b.textContent = "Switch? Redo IMAP setup";
       setTimeout(() => { b.dataset.sure = ""; refresh(); }, 5000); return;
     }
   }

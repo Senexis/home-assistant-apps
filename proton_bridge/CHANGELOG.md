@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.27.2-23
+
+- Switching between split and combined addresses now says, like Proton's app, that the IMAP integration has to be set up again from scratch.
+
 ## 3.27.2-22
 
 - Wording matches Proton's own Bridge app: Synchronizing, Mailbox details, Hostname, Split addresses, Show All Mail, Collect usage diagnostics, Check now.
