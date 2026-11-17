@@ -225,7 +225,7 @@ class Bridge:
 
     def imap(self, index):
         with self.lock:
-            out = self.command(f"info {int(index)}")
+            out = self.command(f"info {int(index)} ")
         m = re.search(r"IMAP Settings.*?Username:\s*(\S+).*?Password:\s*(\S+).*?Security:\s*(\S+)", out, re.S)
         if not m:
             return None
@@ -342,7 +342,7 @@ class Bridge:
         return values
 
     def _security(self):
-        out = self.command("info 0")
+        out = self.command("info 0 ")
         imap = re.search(r"IMAP Settings.*?Security:\s*(\S+)", out, re.S)
         smtp = re.search(r"SMTP Settings.*?Security:\s*(\S+)", out, re.S)
         return (imap.group(1).upper() if imap else None, smtp.group(1).upper() if smtp else None)
@@ -434,7 +434,8 @@ class Bridge:
                     break
             body = plain.lstrip("> ").strip()
             if plain.startswith(">>> "):
-                skipping = plain[4:] == STATUS_LIST  # hide this poll and its output
+                # The page's own reads end in a space: hide them and their output.
+                skipping = plain[4:].endswith(" ") and plain[4:].strip() != ""
             if skipping and not plain.startswith(">>> "):
                 continue
             if skipping:
@@ -442,7 +443,19 @@ class Bridge:
             if body.startswith(("Sync (", "A sync has")):
                 continue
             out.append(raw)
-        return "\n".join(out)
+        return self._mask("\n".join(out))
+
+    def _mask(self, text):
+        """Hide secrets in anything Bridge prints: the part of an address before @, account
+        names and Bridge passwords become dots of the same length."""
+        dots = lambda m: "\u2022" * len(m.group(0))
+        text = re.sub(r"(Password:\s+)(\S+)", lambda m: m.group(1) + "\u2022" * len(m.group(2)), text)
+        text = re.sub(r"[A-Za-z0-9._%+-]+(?=@[A-Za-z0-9.-]+\.[A-Za-z]{2,})", dots, text)
+        for acc in self.cache.get("accounts") or []:
+            name = acc["name"].split("@")[0]
+            if len(name) >= 3:
+                text = re.sub(re.escape(name), dots, text)
+        return text
 
     def check_updates(self):
         with self.lock:
@@ -466,7 +479,7 @@ class Bridge:
         if self.login_state != "idle":
             raise RuntimeError("Finish or cancel the sign-in first.")
         with self.lock:
-            out = self.command("info 0")
+            out = self.command("info 0 ")
             m = re.search(r"IMAP Settings.*?Security:\s*(\S+)", out, re.S)
             current = m.group(1).upper() if m else None
             if ssl is not None and current and (current == "SSL") != ssl:
