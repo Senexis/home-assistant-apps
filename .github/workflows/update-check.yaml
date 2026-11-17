@@ -1,0 +1,124 @@
+# Daily check for a new Proton Mail Bridge release and a new Debian base image.
+# When something changed, it updates the Dockerfile, bumps the app version, test-builds
+# the image (the build verifies the .deb checksum and runs `bridge --version`) and only
+# then commits to main. Home Assistant shows the update; nothing installs on its own.
+# A failed run means the update needs a look: GitHub emails the repo owner.
+name: Update check
+
+on:
+  schedule:
+    - cron: "17 5 * * *" # daily, 06:17/07:17 Amsterdam
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-check
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      DOCKERFILE: proton_bridge/Dockerfile
+      CONFIG: proton_bridge/config.yaml
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Find current and latest versions
+        id: v
+        run: |
+          set -euo pipefail
+          cur_bridge=$(sed -n 's/^ARG BRIDGE_VERSION=//p' "$DOCKERFILE")
+          cur_digest=$(sed -n 's/^FROM debian:trixie-slim@\(sha256:[0-9a-f]*\).*/\1/p' "$DOCKERFILE")
+          app_version=$(sed -n 's/^version: "\(.*\)"/\1/p' "$CONFIG")
+
+          # Newest stable Bridge release on Proton's GitHub (drafts and pre-releases are skipped).
+          latest_bridge=$(gh api repos/ProtonMail/proton-bridge/releases/latest --jq .tag_name | sed 's/^v//')
+          if ! [[ "$latest_bridge" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Unexpected Bridge release tag: $latest_bridge"; exit 1
+          fi
+          # Only move forward, never to an older tag.
+          if [ "$(printf '%s\n%s\n' "$cur_bridge" "$latest_bridge" | sort -V | tail -1)" != "$latest_bridge" ]; then
+            latest_bridge=$cur_bridge
+          fi
+
+          latest_digest=$(docker buildx imagetools inspect debian:trixie-slim --format '{{json .Manifest}}' | jq -r .digest)
+          [[ "$latest_digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::Could not read the Debian digest"; exit 1; }
+
+          {
+            echo "cur_bridge=$cur_bridge"; echo "latest_bridge=$latest_bridge"
+            echo "cur_digest=$cur_digest"; echo "latest_digest=$latest_digest"
+            echo "app_version=$app_version"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "| | Pinned | Latest |"; echo "|---|---|---|"
+            echo "| Proton Mail Bridge | $cur_bridge | $latest_bridge |"
+            echo "| debian:trixie-slim | ${cur_digest:-not pinned} | $latest_digest |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Update the Dockerfile and app version
+        id: up
+        env:
+          CUR_BRIDGE: ${{ steps.v.outputs.cur_bridge }}
+          NEW_BRIDGE: ${{ steps.v.outputs.latest_bridge }}
+          CUR_DIGEST: ${{ steps.v.outputs.cur_digest }}
+          NEW_DIGEST: ${{ steps.v.outputs.latest_digest }}
+          APP_VERSION: ${{ steps.v.outputs.app_version }}
+        run: |
+          set -euo pipefail
+          changes=()
+
+          if [ "$NEW_BRIDGE" != "$CUR_BRIDGE" ]; then
+            url="https://proton.me/download/bridge/protonmail-bridge_${NEW_BRIDGE}-1_amd64.deb"
+            if ! curl -fsSL --retry 3 -o /tmp/bridge.deb "$url"; then
+              # Proton tags on GitHub before the package is on proton.me; try again tomorrow.
+              echo "Bridge $NEW_BRIDGE is tagged but its .deb isn't downloadable yet." >> "$GITHUB_STEP_SUMMARY"
+              NEW_BRIDGE=$CUR_BRIDGE
+            else
+              sha=$(sha256sum /tmp/bridge.deb | cut -d' ' -f1)
+              sed -i "s/^ARG BRIDGE_VERSION=.*/ARG BRIDGE_VERSION=${NEW_BRIDGE}/; s/^ARG BRIDGE_SHA256=.*/ARG BRIDGE_SHA256=${sha}/" "$DOCKERFILE"
+              changes+=("Bridge ${CUR_BRIDGE} to ${NEW_BRIDGE}")
+            fi
+          fi
+
+          if [ "$NEW_DIGEST" != "$CUR_DIGEST" ]; then
+            sed -i "s|^FROM debian:trixie-slim.*|FROM debian:trixie-slim@${NEW_DIGEST}|" "$DOCKERFILE"
+            changes+=("Debian trixie-slim base image")
+          fi
+
+          if [ ${#changes[@]} -eq 0 ]; then
+            echo "Everything is up to date." >> "$GITHUB_STEP_SUMMARY"
+            echo "changed=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+
+          # App version: <bridge version>-<build number>. A new Bridge restarts the build number at 1.
+          if [ "$NEW_BRIDGE" != "$CUR_BRIDGE" ]; then
+            new_app="${NEW_BRIDGE}-1"
+          else
+            new_app="${APP_VERSION%-*}-$(( ${APP_VERSION##*-} + 1 ))"
+          fi
+          sed -i "s/^version: \".*\"/version: \"${new_app}\"/" "$CONFIG"
+
+          msg="Update $(IFS=,; echo "${changes[*]}" | sed 's/,/ and /g') (app ${new_app})"
+          echo "$msg" >> "$GITHUB_STEP_SUMMARY"
+          { echo "changed=true"; echo "message=$msg"; } >> "$GITHUB_OUTPUT"
+          git diff
+
+      - name: Test build
+        if: steps.up.outputs.changed == 'true'
+        run: docker build --pull -t proton-bridge-test proton_bridge
+
+      - name: Commit to main
+        if: steps.up.outputs.changed == 'true'
+        env:
+          MESSAGE: ${{ steps.up.outputs.message }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "$MESSAGE"
+          git push origin HEAD:main

@@ -1,7 +1,8 @@
 FROM debian:trixie-slim
 
 # Proton's official Bridge release, pinned and checksum-verified.
-# To update: change both values (sha256 of the .deb from proton.me) and bump config.yaml version.
+# Kept current by .github/workflows/update-check.yaml (daily). By hand: change both values
+# (sha256 of the .deb from proton.me) and bump the config.yaml version.
 ARG BRIDGE_VERSION=3.27.2
 ARG BRIDGE_SHA256=cf08332dcc4a332c3592476855e2007e6daadbcdac11fab6af83470a3255a8dc
 
