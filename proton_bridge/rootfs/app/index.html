@@ -106,6 +106,7 @@ pre { background: var(--field); border-radius: 12px; padding: 12px; margin: 0 0 
   </nav>
 
   <section id="tab-account">
+    <div class="card" id="loading"><span class="spin"></span><span id="loading-text">Starting Bridge…</span></div>
     <div class="card hidden" id="signin">
       <ol class="stepper" id="stepper">
         <li data-step="1"><span>1</span>Sign in</li>
@@ -233,13 +234,24 @@ document.querySelectorAll("nav button").forEach((b) => b.onclick = () => {
 
 // Status
 async function refresh() {
-  try { state = await api("api/status"); } catch { return; }
+  let next;
+  try { next = await api("api/status"); } catch { next = null; }
+  const starting = !next || next.accounts === null;
+  $("loading").classList.toggle("hidden", !starting);
+  $("loading-text").textContent = next ? "Starting Bridge…" : "Bridge is restarting…";
+  if (starting) {
+    $("chip").textContent = "Starting…"; $("chip").className = "chip";
+    ["signin", "accounts-card", "imap-card"].forEach((id) => $(id).classList.add("hidden"));
+    return;
+  }
+  state = next;
   const connected = state.accounts.filter((a) => a.state === "connected");
   const sync = state.sync;
   const chip = $("chip");
   if (!state.accounts.length) { chip.textContent = "Not signed in"; chip.className = "chip warn"; }
   else if (sync && !sync.done) { chip.textContent = `Syncing ${Math.round(sync.percent)}%`; chip.className = "chip"; }
   else if (connected.length) { chip.textContent = "Connected"; chip.className = "chip ok"; }
+  else if (state.accounts.some((a) => a.state === "locked")) { chip.textContent = "Loading account…"; chip.className = "chip"; }
   else { chip.textContent = "Signed out"; chip.className = "chip warn"; }
 
   resumeWizard();
@@ -410,6 +422,8 @@ $("console-form").onsubmit = async (e) => {
 
 refresh();
 setInterval(() => { if (state.login_state === "idle" && ["credentials", "done"].includes(pane)) refresh(); }, 5000);
+// While Bridge starts, check more often.
+setInterval(() => { if (!$("loading").classList.contains("hidden")) refresh(); }, 1500);
 </script>
 </body>
 </html>

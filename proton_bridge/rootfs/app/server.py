@@ -48,7 +48,6 @@ class Bridge:
         self.pid = None
         self.login_state = "idle"  # idle | need_2fa | need_mailbox | need_hv
         self.hv_url = None
-        self.cache = {"accounts": [], "time": 0}
         self.start()
         threading.Thread(target=self._reader, daemon=True).start()
         threading.Thread(target=self._watch, daemon=True).start()
@@ -61,6 +60,8 @@ class Bridge:
             os.execvp(BRIDGE[0], BRIDGE)
         self.pid, self.fd = pid, fd
         self.login_state, self.hv_url = "idle", None
+        self.ready = False  # until Bridge has loaded and answered its first "list"
+        self.cache = {"accounts": None, "time": 0}
 
     def _stop(self):
         """Stop the current Bridge and wait until it's really gone (it holds a lock file)."""
@@ -151,12 +152,17 @@ class Bridge:
 
     # --- features ------------------------------------------------------------
     def accounts(self):
+        if not self.ready and ">>> " not in self.buf:
+            return None  # Bridge is still starting
         if self.login_state != "idle" or self.console_waiting or not self.lock.acquire(timeout=1):
             return self.cache["accounts"]
         try:
             out = self.command("list")
         finally:
             self.lock.release()
+        if "No active accounts" not in out and "address mode" not in out and not re.search(r"^\s*\d+\s*:", out, re.M):
+            return self.cache["accounts"] if self.ready else None
+        self.ready = True
         accounts = []
         for m in re.finditer(r"^\s*(\d+)\s*:\s*(\S+)\s+\(\s*([^,]+?)\s*,\s*([^)]+?)\s*\)", out, re.M):
             accounts.append({"index": int(m.group(1)), "name": m.group(2),
