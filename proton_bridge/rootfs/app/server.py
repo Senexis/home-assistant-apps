@@ -21,7 +21,10 @@ INGRESS_IP = os.environ.get("UI_ALLOW_IP", "172.30.32.2")
 PORT = 8099
 IMAP_PORT = 9143
 BRIDGE = os.environ.get("UI_BRIDGE", "/usr/local/bin/bridge --cli").split()
-INDEX = Path(__file__).with_name("index.html").read_bytes()
+import hashlib
+_index = Path(__file__).with_name("index.html").read_bytes()
+UI_VERSION = hashlib.sha256(_index).hexdigest()[:12]
+INDEX = _index.replace(b"__UI_VERSION__", UI_VERSION.encode())
 ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b[()][A-Za-z0-9]|\x1b[=>]")
 SGR = re.compile(r"\x1b\[[0-9;]*m")
 NON_SGR = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-ln-~]|\x1b\[[0-9;]*\?[0-9;]*m|\x1b[()][A-Za-z0-9]|\x1b[=>]")
@@ -521,7 +524,7 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/screen":
             self._json({"text": bridge.transcript()})
         elif path == "/api/status":
-            self._json({"accounts": bridge.accounts(), "sync": bridge.sync(),
+            self._json({"ui": UI_VERSION, "accounts": bridge.accounts(), "sync": bridge.sync(),
                         "login_state": bridge.login_state, "hv_url": bridge.hv_url})
         else:
             self.send_error(404)

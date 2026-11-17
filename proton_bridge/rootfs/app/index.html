@@ -302,6 +302,8 @@ document.querySelectorAll("nav button").forEach((b) => b.onclick = () => openTab
 async function refresh() {
   let next;
   try { next = await api("api/status"); } catch { next = null; }
+  // The app was updated since this page loaded: load the new page (keeps the tab).
+  if (next && next.ui && next.ui !== "__UI_VERSION__") { location.reload(); return; }
   const starting = !next || next.accounts === null;
   $("loading").classList.toggle("hidden", !starting);
   $("loading-text").textContent = next ? "Starting Bridge…" : "Bridge is restarting…";
