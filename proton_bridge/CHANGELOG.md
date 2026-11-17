@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.27.2-30
+
+- Sync progress and time left are tracked per account.
+- The status badge says how many accounts are synchronizing, like "Synchronizing 1 of 2 accounts".
+
 ## 3.27.2-29
 
 - Synchronizing shows the time left again, counting down to the second.

@@ -364,18 +364,26 @@ document.querySelectorAll("nav button").forEach((b) => b.onclick = () => openTab
 
 // Status
 // Sync time left, ticking every second between status polls.
-let etaSeen = null, etaEnd = null;
-function etaText() {
-  if (!etaEnd) return "";
-  const s = Math.max(0, Math.round((etaEnd - Date.now()) / 1000));
+// Per account: the estimate last seen and when it runs out, so a repeat of the same line doesn't restart it.
+const etas = {};
+function trackEtas(syncs) {
+  Object.keys(etas).forEach((n) => { if (!syncs[n] || syncs[n].done || syncs[n].eta == null) delete etas[n]; });
+  Object.entries(syncs).forEach(([n, x]) => {
+    if (x.done || x.eta == null || (etas[n] && etas[n].seen === x.eta)) return;
+    etas[n] = { seen: x.eta, end: Date.now() + x.eta * 1000 };
+  });
+}
+function etaText(name) {
+  const e = etas[name]; if (!e) return "";
+  const s = Math.max(0, Math.round((e.end - Date.now()) / 1000));
   if (!s) return "Almost done";
   const h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, sec = s % 60, pad = (n) => String(n).padStart(2, "0");
   return (h ? `${h}h ${pad(m)}m ${pad(sec)}s` : m ? `${m}m ${pad(sec)}s` : `${sec}s`) + " left";
 }
 function tickEta() {
-  const t = etaText();
   document.querySelectorAll("[data-eta]").forEach((e) => {
-    const v = t && e.dataset.eta === "sep" ? ", " + t.charAt(0).toLowerCase() + t.slice(1) : t;
+    const t = etaText(e.dataset.eta);
+    const v = t && e.hasAttribute("data-sep") ? ", " + t.charAt(0).toLowerCase() + t.slice(1) : t;
     if (e.textContent !== v) e.textContent = v; });
 }
 setInterval(tickEta, 1000);
@@ -395,21 +403,21 @@ async function refresh() {
   }
   state = next;
   const connected = state.accounts.filter((a) => a.state === "connected");
-  const sync = state.sync;
+  const sync = state.sync, syncs = state.syncs || {};
+  const syncing = connected.filter((a) => syncs[a.name] && !syncs[a.name].done);
   const chip = $("chip");
   if (!state.accounts.length) { chip.textContent = "Not signed in"; chip.className = "chip warn"; }
-  else if (sync && !sync.done) { chip.textContent = `Synchronizing ${Math.round(sync.percent)}%`; chip.className = "chip"; }
+  else if (syncing.length) {
+    chip.textContent = state.accounts.length > 1 ? `Synchronizing ${syncing.length} of ${state.accounts.length} accounts` : "Synchronizing";
+    chip.className = "chip"; }
   else if (connected.length) { chip.textContent = "Connected"; chip.className = "chip ok"; }
   else if (state.accounts.some((a) => a.state === "locked")) { chip.textContent = "Loading account…"; chip.className = "chip"; }
   else { chip.textContent = "Signed out"; chip.className = "chip warn"; }
 
   resumeWizard();
-  // Bridge's ETA counts down from the moment we first see it; a new estimate restarts the countdown.
-  if (sync && !sync.done && sync.eta != null) {
-    if (sync.eta !== etaSeen) { etaSeen = sync.eta; etaEnd = Date.now() + sync.eta * 1000; }
-  } else { etaSeen = null; etaEnd = null; }
+  trackEtas(syncs);
   $("done-sync").innerHTML = sync && !sync.done
-    ? `<div class="sub">Synchronizing (${Math.round(sync.percent)}%)<span data-eta="sep"></span></div><div class="bar"><div style="width:${sync.percent}%"></div></div>`
+    ? `<div class="sub">Synchronizing (${Math.round(sync.percent)}%)<span data-eta="${esc(sync.name)}" data-sep></span></div><div class="bar"><div style="width:${sync.percent}%"></div></div>`
     : sync && sync.done ? `<div class="msg ok">All mail synchronized.</div>` : "";
   const showSignin = !state.accounts.length || addingAccount || state.login_state !== "idle" || pane === "done";
   $("signin").classList.toggle("hidden", !showSignin);
@@ -447,10 +455,10 @@ function addrPicker(a) {
 }
 
 function accountHtml(a, solo) {
-  const sync = state.sync;
+  const sync = (state.syncs || {})[a.name];
   const syncing = sync && !sync.done && a.state === "connected";
   const status = a.state === "connected"
-    ? (syncing ? `<span class="dot sync"></span>Synchronizing (${Math.round(sync.percent)}%)<span class="sbar"><div style="width:${sync.percent}%"></div></span><span data-eta></span>`
+    ? (syncing ? `<span class="dot sync"></span>Synchronizing (${Math.round(sync.percent)}%)<span class="sbar"><div style="width:${sync.percent}%"></div></span><span data-eta="${esc(a.name)}"></span>`
                : `<span class="dot"></span>Connected`)
     : a.state === "locked" ? `<span class="dot sync"></span>Loading, try again shortly` : `<span class="dot off"></span>Signed out`;
   const info = mailbox[a.index];

@@ -208,21 +208,30 @@ class Bridge:
         except Exception as err:  # retried on the next start
             print("Could not apply defaults:", err, flush=True)
 
+    def syncs(self):
+        """Sync state per account, from Bridge's own lines:
+        "A sync has begun for <name>.", "Sync (<name>): 12.3% (Elapsed: 4.5s, ETA: 67.8s)",
+        "A sync has finished for <name>." Returns ({name: state}, name of the latest line)."""
+        out, last = {}, None
+        for line in self.buf.splitlines():
+            line = line.lstrip("> ").strip()
+            m = re.match(r"A sync has (begun|finished) for (.+)\.$", line)
+            if m:
+                last = m.group(2)
+                out[last] = {"done": True} if m.group(1) == "finished" else {"done": False, "percent": 0.0, "eta": None}
+                continue
+            m = re.match(r"Sync \((.+)\): ([\d.]+)% \(Elapsed: ([\d.]+)s, ETA: ([\d.]+)s\)", line)
+            if m:
+                last = m.group(1)
+                # Bridge's estimate is meaningless right after a sync (re)starts.
+                eta = float(m.group(4)) if float(m.group(3)) >= 30 else None
+                out[last] = {"done": False, "percent": float(m.group(2)), "eta": eta}
+        return out, last
+
     def sync(self):
-        lines = [l.lstrip("> ") for l in self.buf.splitlines()]
-        lines = [l for l in lines if l.startswith(("Sync (", "A sync has"))]
-        if not lines:
-            return None
-        last = lines[-1]
-        if "has finished" in last:
-            return {"done": True}
-        m = re.search(r"([\d.]+)%", last)
-        eta = re.search(r"ETA: ([\d.]+)s", last)
-        elapsed = re.search(r"Elapsed: ([\d.]+)s", last)
-        if not elapsed or float(elapsed.group(1)) < 30:
-            eta = None  # Bridge's estimate is meaningless right after (re)starting
-        return {"done": False, "percent": float(m.group(1)) if m else 0.0,
-                "eta": float(eta.group(1)) if eta else None}
+        """The most recent account's sync state, with its name (used right after signing in)."""
+        out, last = self.syncs()
+        return dict(out[last], name=last) if last else None
 
     def imap(self, index):
         with self.lock:
@@ -558,7 +567,7 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/screen":
             self._json({"text": bridge.transcript()})
         elif path == "/api/status":
-            self._json({"ui": UI_VERSION, "accounts": bridge.accounts(), "sync": bridge.sync(),
+            self._json({"ui": UI_VERSION, "accounts": bridge.accounts(), "sync": bridge.sync(), "syncs": bridge.syncs()[0],
                         "login_state": bridge.login_state, "hv_url": bridge.hv_url})
         else:
             self.send_error(404)
