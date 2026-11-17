@@ -320,6 +320,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Cache-Control", "no-store")
             self.end_headers()
             self.wfile.write(INDEX)
+        elif path == "/api/screen":
+            self._json({"text": bridge.buf[-6000:]})
         elif path == "/api/status":
             self._json({"accounts": bridge.accounts(), "sync": bridge.sync(),
                         "login_state": bridge.login_state, "hv_url": bridge.hv_url})
