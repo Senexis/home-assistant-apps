@@ -93,7 +93,7 @@ class Bridge:
             except OSError:
                 time.sleep(1)
                 continue
-            text = ANSI.sub("", data.decode("utf-8", "replace")).replace("\r", "")
+            text = ANSI.sub("", data.decode("utf-8", "replace")).replace("\r", "").replace("\b", "")
             self.buf = (self.buf + text)[-300_000:]
 
     # --- talking to the CLI -----------------------------------------------
