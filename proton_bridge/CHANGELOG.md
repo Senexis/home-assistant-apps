@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.27.2-26
+
+- Shorter help texts and a more general Console description.
+- Documentation rewritten to match the page, with IMAP and SMTP set-up side by side.
+
 ## 3.27.2-25
 
 - Fixed: the SSL / STARTTLS choices could show no selection after Bridge restarted.
