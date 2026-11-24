@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.27.2-35
+
+- Updated Debian trixie-slim base image.
+
 ## 3.27.2-34
 
 - An account that is still loading says "Loading account", and its buttons are disabled until it's ready.
